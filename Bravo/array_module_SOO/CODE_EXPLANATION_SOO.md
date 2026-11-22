@@ -187,3 +187,182 @@ Open **Pointers** and choose the final values. The correct answer is B: a become
 `Workshop()` draws the backdrop and mascot with Raylib shapes. `CardFace()` adds a face to each array card.
 The card keeps its number and status text. The app scales the fixed canvas to fit the window
 and reverses the same transform for mouse clicks.
+
+## 미션 지도 / Mission map
+
+`roadmap_SOO.h`의 `SOO_CHAPTERS`는 챕터별 범위, 이름, 난이도를 보관합니다. `SOO_ROUTES`는 지도 번호를 이미 구현한 미션에 연결합니다. 예를 들어 지도 18번은 기존 2D 배열 미션을 엽니다. 값이 0이면 아직 미션을 열지 않습니다. `DrawRoadmap()`은 이 데이터를 그려 클릭한 미션의 경로를 반환합니다.
+
+`SOO_CHAPTERS` stores the course ranges and difficulty. `SOO_ROUTES` maps course numbers to implemented lessons. For example, course level 18 opens the existing 2D array lesson. A zero route is a planned level. `DrawRoadmap()` draws the map and returns the selected route.
+
+## Stage 1 배열과 반복문 / Loops and Arrays
+
+`stage1_SOO.h`의 SOO_INTRO에는 문제, 보기, 예제 코드가 있습니다. IntroLoad는 예제를 LOOP, READ, WRITE, RETURN, END 단계로 기록합니다. IntroAt은 초기값부터 현재 단계까지 적용해서 화면에 표시할 상태를 계산합니다. 그래서 Back도 카드 값을 정확히 복원합니다. 예제 실행은 에디터 없이 동작합니다.
+
+- 01: 0~4번에 1을 씁니다. 이번 챕터의 활성 상태는 1입니다.
+- 02: 3, 5, 7을 순서대로 읽고, 값 7의 위치인 2를 반환하면 통과합니다.
+- 03: 0을 읽은 경우만 1을 씁니다.
+- 04: 위쪽 source는 그대로 둡니다. 아래쪽 target에 쓸 때 전달 방향을 화살표로 보여줍니다.
+- 05: 한 쌍을 읽고 두 번 씁니다. 현재 쌍을 연결하고 temp를 표시합니다.
+- 06: 3×3 카드에 행과 열 순서로 1을 씁니다.
+
+IntroLoad builds the sample events. IntroAt replays those events to the chosen step. The search checks the return value. The other missions compare the final board with their own target. A wrong quiz answer still lets the player watch the correct sample.
+
+## Stage 2 포인터 / Pointers and Swapping
+
+`PointerLessonLoad()`는 미리 준비된 예제의 각 연산 뒤에 카드 값, 가리키는 위치, 임시 값과 누적값을 복사합니다. `DrawStage2()`는 현재 단계의 복사본을 그립니다. Back으로 돌아갈 때 원래 배열을 다시 수정할 필요가 없습니다. 예제에서 `arr + i`는 위치(주소), `*(arr + i)`는 그곳의 값입니다.
+
+07–08은 기존 값을 temp에 먼저 보관하고 숫자 또는 문자를 바꿉니다. 09는 읽을 때마다 최댓값을 갱신합니다. 10은 양쪽 포인터가 가리키는 값을 교환하고 가운데로 이동합니다. 11은 읽은 값을 합계에 더하고 게이지에 표시합니다.
+
+`PointerLessonLoad()` stores a snapshot after each operation. `DrawStage2()` draws the selected snapshot. The player can go back without undoing writes. The sample code uses pointer arithmetic and dereferencing. The app plays built-in examples and does not compile player code.
+
+## Stage 3 배열 조작 / Array Operations
+
+`ArrayLessonLoad()`는 단계마다 배열 상태를 복사합니다. `used`는 실제 데이터 수이므로, 카드 값이 0이어도 빈 칸으로 취급하지 않습니다. `DrawStage3()`는 현재 상태를 읽고 이동 방향을 그립니다.
+
+12번은 최댓값과 같은 값을 두 번째 후보로 세지 않습니다. 13번은 뒤쪽부터 오른쪽으로 복사해서 원래 값을 지킵니다. 14번은 삭제 위치부터 왼쪽으로 당기고 유효 길이를 줄입니다. 15번은 3을 읽을 때만 횟수를 올립니다. 16번은 처음의 1을 저장하고, 값을 왼쪽으로 당긴 후 마지막에 1을 넣습니다. 17번은 `ArrayPick()`으로 서로 다른 두 위치를 선택하고 `ArrayPairSum()`으로 합을 구합니다. 두 장의 합이 120이어야 통과합니다.
+
+`ArrayLessonLoad()` saves a board after each step. `used` tracks the number of occupied slots. The insert moves from right to left, the delete shifts from left to right, and the rotation saves the first value before shifting. The final mission checks two different battery slots and their exact sum.
+
+## Stage 4 격자 / 2D Arrays and Patterns
+
+`GridFind()`는 행 순서로 한 칸씩 가면서 그 위치의 가로 패턴을 먼저, 없으면 세로를 확인합니다. 먼저 발견한 1~4의 연속 구간만 반환합니다. 0, -1, -2는 제외합니다. `GridLessonLoad()`는 탐색, 제거, 점수 갱신, 중력 단계를 복사해 Back으로 되돌릴 수 있게 합니다.
+
+중력은 열마다 아래에서 위로 읽고, 별도의 dest 위치에 값을 쌓아 순서를 보존합니다. 옮긴 자리는 -1, 최종 위쪽 공간은 -2가 됩니다. 22번은 제거 한 번과 중력 한 번을 보여줍니다. 자동으로 무한 반복하거나 랜덤 값을 넣지 않습니다. 기존처럼 예제 기반이며, 에디터가 작성한 C 코드를 실행하는 기능은 아직 없습니다.
+
+`GridFind()` checks horizontal before vertical at each row-major position, not all horizontal matches before all vertical ones. Only values 1–4 can match. Gravity packs each column from the bottom while preserving order and fills the top with -2. Level 22 performs one removal and one gravity pass.
+
+## Stage 5 문자열과 문자 포인터 / Strings and Char Pointers
+
+`stage5_SOO.h`의 `StringBuild()`는 예제 안에서 실제 문자 포인터를 이동하고, 각 단계의 문자 메모리를 복사합니다. 지역 포인터 주소를 저장하지 않고 문자 값과 위치만 저장하므로 이전 단계도 안전하게 볼 수 있습니다. `initialized` 비트는 아직 쓰지 않은 칸과 실제로 복사한 `\0`을 구분합니다.
+
+- 23: HELLO의 문자를 하나씩 읽고 카운터를 올립니다. 마지막 `\0`은 길이에 포함하지 않습니다.
+- 24: OpenAI에서 O, e, A, I를 찾습니다. 찾은 모음은 초록색이며 대소문자 모두 처리합니다.
+- 25: CODE의 문자 네 개와 널 문자 한 개까지 복사합니다. `--`는 아직 쓰지 않은 칸입니다.
+- 26: BOMB의 끝을 찾아 SAFE를 이어 씁니다. 결과 BOMBSAFE에는 9바이트가 필요합니다. `Try 8-byte buffer`는 공간 부족 시 아무것도 쓰지 않는 실패 예제입니다.
+- 27: 입력란에 최대 8개의 영문/ASCII 문자를 입력하고 Verify를 누릅니다. 비교 순서는 저장된 BOMB 대 입력 문자열입니다. `0`이면 일치, 음수면 저장된 문자열이 앞, 양수면 뒤입니다. 빈 문자열이나 접두어도 널 문자를 비교해서 처리합니다. 중간 BYTE DIFF는 해당 단계의 차이이며, 최종 RETURN이 함수 결과입니다.
+
+`StringCompare()`는 두 unsigned char 값을 비교합니다. `DrawStage5()`는 화면과 버튼을 그립니다. 이 모듈은 준비된 문자열 예제를 실행하며, 사용자 C 코드를 편집/컴파일하는 기능은 아닙니다. 목적지 버퍼 검사는 게임에서 추가한 보호 장치이고, 오른쪽 시험용 함수는 공간이 충분하다는 가정을 사용합니다.
+
+`StringBuild()` executes the built-in pointer example and stores memory snapshots. It saves values and offsets, not local addresses. `initialized` distinguishes a copied null byte from an unwritten slot. Length excludes the terminator; copy and concat include it. The game checks destination capacity before copying. The displayed exam-style functions assume sufficient space. Level 27 accepts up to eight ASCII characters and compares stored BOMB against the input. Final RETURN gives the result; intermediate BYTE DIFF shows the current comparison. This is a standalone lesson, not a C code editor.
+
+## Stage 6 연결 리스트 / Linked Lists
+
+### 실행 방법
+
+지도에서 28–33번을 고릅니다. A/B/C로 코드 이해 문제를 풀고, Step이나 Back으로 연결이 바뀌는 과정을 확인합니다. 예제 코드의 Node는 소스의 SooListNode에 해당합니다. 앱 구현은 C11이며 new/delete 대신 malloc/free와 NULL을 사용합니다.
+
+### 배열과 다른 점
+
+화면의 N0, N1은 배열 인덱스가 아니라 변하지 않는 노드 ID입니다. 실제 주소 숫자를 흉내 낸 값도 아닙니다. 노드는 화면에서 움직이지 않고 next 연결을 따라 논리 순서가 결정됩니다. 예를 들어 33번 마지막 head는 N1입니다. 순서는 N1(20) → N0(10) → N3(40) → N2(30) → NULL입니다. 노드의 data는 바뀌지 않습니다. 파란 선은 next, 분홍 선은 prev입니다.
+
+### 미션별 설명
+
+- 28: head를 current에 넣고 current->next를 따라갑니다. 네 노드를 방문한 뒤 current가 NULL이 되면 종료합니다. data가 0이라서 멈추는 것이 아닙니다.
+- 29: 새 N2(20)를 만듭니다. 새 노드가 먼저 기존 다음 노드 N1(30)을 가리키게 합니다. 그다음 N0(10)의 next를 새 노드로 바꿉니다. 순서를 바꾸면 원래 뒤쪽 리스트를 잃을 수 있습니다.
+- 30: target을 저장하고, 앞 노드가 target의 다음 노드를 직접 가리키게 합니다. 그 뒤 free합니다. 화면의 freed 칸은 이미 해제된 노드의 기록이며 실제 메모리를 읽는 것이 아닙니다. free가 target을 자동으로 NULL로 바꾸지는 않으며, 해제한 주소는 다시 역참조하면 안 됩니다.
+- 31: 5 → 12 → 99를 따라가며 값을 비교합니다. 반환값은 99라는 숫자가 아니라 그 노드의 주소입니다. 찾지 못하면 NULL을 반환합니다.
+- 32: next를 먼저 저장합니다. current->next를 prev로 바꾸고 작업 포인터들을 앞으로 진행합니다. 끝나면 head를 prev로 바꿉니다. 노드와 data는 그대로이며 화살표 방향만 바뀝니다.
+- 33: first, second, after를 먼저 보관하고, 앞쪽 연결 → second의 prev/next → first의 prev/next → after의 prev를 바꿉니다. 첫 쌍에서는 *head가 바뀝니다. 홀수 길이면 마지막 남은 노드는 그대로 둡니다. 연결을 한 줄씩 변경하는 도중에는 일시적으로 끊기거나 중복된 방향이 보일 수 있습니다. 한 쌍의 수정이 끝나면 양쪽 링크가 일치합니다.
+
+### 파일과 함수
+
+stage6_SOO.h는 실제 노드 구조체, 화면 상태, 함수 선언을 모읍니다. stage6_SOO.c에는 두 부분이 있습니다.
+
+1. 실제 C 함수: SooListCreate는 malloc 실패를 검사합니다. SooListInsertAfter는 새 노드와 이웃을 연결합니다. SooListRemoveAfter는 먼저 우회하고 free합니다. SooListFind는 주소를 반환합니다. SooListReverse와 SooListSwapPairs는 Node** 형태로 시작 노드를 바꿉니다. SooListFree는 리스트 전체를 해제합니다. 이 함수들은 테스트에서 실제 힙 메모리로 실행합니다.
+2. 화면용 기록: ListLoad는 준비된 미션을 노드 ID 그래프로 구성하고 각 줄 이후 상태를 복사합니다. ListChoose는 한 번 답을 받고 재생을 시작합니다. ListAdvance는 한 단계, ListBack은 이전 복사본으로 이동합니다. ListFrameValid는 최종 next 링크에 순환·끊김·해제 노드 참조가 없는지, 이중 리스트의 prev가 맞는지 검사합니다. MissionGoal은 해당 미션의 정확한 노드 ID 순서와 값을 확인합니다.
+
+stage6_view_SOO.h의 DrawStage6은 화살표와 카드, 현재 포인터, 실행 줄을 그립니다. 화면의 메모리 그림은 기록된 ID를 사용하기 때문에 삭제된 노드를 Back으로 확인해도 실제로 해제된 메모리를 접근하지 않습니다. 이 모듈도 사용자 C 코드를 컴파일하는 에디터가 아니라 준비된 예제입니다.
+
+### 테스트
+
+make -f Makefile_SOO test로 이전 단계와 Stage 6을 함께 검사합니다. 여섯 예제의 순서, 노드 ID 보존, 방문 수, 찾은 포인터, 삭제 후 미참조, 다음/이전 연결을 검사합니다. 실제 C 함수에는 빈 리스트와 1–5개 노드를 만들어 교환·뒤집기를 적용합니다. 두 번 적용하면 같은 노드 주소 순서가 복구되는지도 검사합니다. AddressSanitizer와 UndefinedBehaviorSanitizer를 켜서 잘못된 메모리 접근도 확인합니다.
+
+### English
+
+Open levels 28–33, answer A/B/C, then step or go back. Node labels are stable identities, not array indices or printed memory addresses. Nodes stay in place while next links change. Blue lines are next; pink lines are prev.
+
+The C implementation uses malloc, free and NULL. SooListInsertAfter saves the old successor before replacing the current link. SooListRemoveAfter reconnects before freeing. SooListFind returns a node pointer. SooListReverse saves the successor before reversing each link. SooListSwapPairs changes links and the caller's head without exchanging data. Odd trailing nodes stay in place.
+
+ListLoad records each prepared lesson as graph snapshots. The view uses IDs instead of live heap addresses, so Back after deletion is safe. A freed address must never be read; free does not automatically set a pointer to NULL. ListFrameValid checks final consistency, and MissionGoal checks the expected node identity order. The actual heap-based functions are tested separately. This remains a built-in lesson viewer rather than an editor that executes player code.
+
+## Stage 7 동적 메모리 / Memory Allocation
+
+### 조작
+
+지도에서 34–37번을 고르고 A/B/C로 답합니다. 34–35는 안전한 예제를, 36–37은 원본 오류 예제를 먼저 재생합니다. 정답 여부는 이해 문제의 정답 여부이며, 원본 프로그램이 안전하다는 뜻은 아닙니다. 36–37의 Run fix로 수정본을 비교하세요. Reset은 답과 재생 위치를 초기화합니다.
+
+- 34: 네 int 칸을 확보하고 하나에 100을 쓴 후 free와 NULL 대입을 합니다. Try malloc failure는 할당 결과가 NULL이어서 모든 접근을 건너뛰는 예제입니다.
+- 35: 다섯 칸에 10,20,30,40,50을 쓴 후 delete[]로 해제합니다. Try delete (wrong)는 잘못된 해제 방식을 차단합니다.
+- 36: 원본은 함수가 끝나도 여덟 칸이 해제되지 않아 빨간색으로 남습니다. Run fix에서는 delete[]를 실행해 누수를 없앱니다.
+- 37: 원본은 delete 뒤 읽기를 시도합니다. 모델은 위험한 접근을 실행하기 전에 멈춥니다. 수정본은 읽기 → delete → nullptr 순서입니다. Alias case는 ptr을 nullptr로 바꿔도 alias가 여전히 해제된 대상을 가리키는 것을 보여줍니다.
+
+### 화면과 C 코드
+
+점(.)은 빈 칸, ?는 할당됐지만 아직 쓰지 않은 값입니다. 한 칸은 바이트 하나가 아니라 int 하나 크기의 학습용 공간입니다. 실제 운영체제 힙 배치나 주소를 표시하지 않습니다. 해제된 메모리는 다시 읽어서 표시하는 것이 아니라 저장된 상태로 보여줍니다.
+
+stage7_SOO.h의 MemoryFrame은 값, 할당 종류, 유효 길이, 포인터/별칭 상태를 보관합니다. MemoryApply는 MEM_ALLOC, MEM_WRITE, MEM_READ, MEM_FREE 등을 하나씩 검증합니다. NULL, 범위 초과, 초기화 전 읽기, 잘못된 해제 종류, 중복 해제, 해제 후 접근을 차단합니다. MEM_END에서 아직 할당이 남으면 누수로 판정합니다. MemoryBuild는 예제를 이 이벤트들로 구성하고 복사본을 남깁니다. MemoryBack은 이전 복사본을 보여줍니다. DrawStage7은 칸, 경고와 비교 버튼을 그립니다.
+
+앱과 엔진은 C11로 컴파일됩니다. 35–37의 C++ 코드는 문자열로 표시하는 학습 예제이며 C++ 실행기를 추가한 것이 아닙니다. new[]/delete[]와 new/delete는 각각 맞춰야 하며 malloc으로 얻은 메모리는 free로 해제합니다. 일반적인 throwing new의 실패는 NULL 반환이 아니라 예외입니다. NULL 실패 예제는 malloc에만 적용합니다. read(*ptr)는 예제의 출력/읽기를 뜻하는 설명용 표기입니다. new int 뒤의 *ptr=100은 new int(100)의 초기화 의미를 두 줄로 보여주는 구성입니다.
+
+NULL/nullptr 대입은 다른 포인터를 지우거나 메모리를 해제하지 않습니다. 이 미션은 안전한 마무리를 보여주려고 포인터까지 비우게 하지만, 이것만으로 모든 별칭 문제가 해결되지는 않습니다. 실제로 범위를 벗어난 메모리나 해제된 주소를 읽지는 않습니다.
+
+### 테스트
+
+make -f Makefile_SOO test는 Stage 1–7을 검사합니다. test_stage7_SOO.c는 네 수정 예제, 누수 원본, 해제 후 접근 원본, 별칭, malloc 실패, 잘못된 delete, 범위, 초기화 전 읽기, 이중 해제를 검사합니다. AddressSanitizer와 UndefinedBehaviorSanitizer도 사용합니다.
+
+### English
+
+Open levels 34–37. Choose A/B/C, then use Play, Step or Back. Levels 36–37 first show the broken original. A correct quiz answer does not make that original safe: choose Run fix to see the corrected example. The alias experiment shows that clearing ptr does not clear another pointer to the same released allocation.
+
+MemoryApply checks each event in a safe teaching model. It does not execute native use-after-free or invalid delete. MemoryBuild saves snapshots; MemoryBack selects an earlier snapshot. Slots represent ints rather than bytes. A dot is free space; a question mark is allocated but uninitialized.
+
+The app is still C11. C++ examples are displayed as text. Match malloc/free, new/delete and new[]/delete[]. Normal throwing new does not return NULL on failure; only the malloc lesson simulates a NULL allocation result. The read(...) notation describes an illustrative access. All Stage 7 operations run against a bounded model rather than a real general-purpose heap allocator.
+
+## Stage 8 Vector와 Iterator / Vector and Iterator
+
+### 실행 방법
+
+지도에서 38–40번을 고릅니다. 38번과 39번은 A/B/C로 답하고 Step/Back으로 예제를 확인합니다. 39번의 Original은 잘못된 반복자를 읽으려다 멈춥니다. Run fix는 erase가 돌려준 반복자를 사용합니다. Last element는 마지막 값을 지워서 end()가 반환되는 예제입니다. end() 자체는 유효한 위치지만 읽을 수 있는 원소가 아닙니다.
+
+40번은 직접 조작하는 최종 미션입니다.
+
+1. Scan next로 10을 읽고 99로 이동합니다.
+2. Scan next를 다시 눌러 99를 찾습니다.
+3. it = erase(it)로 제거합니다. 반환된 반복자가 20을 가리킵니다.
+4. Scan next로 20과 30을 검사하고 end()까지 갑니다.
+5. push_back(40)으로 새 원소를 넣습니다. 이전 반복자는 다시 사용하지 않습니다.
+6. Verify circuit으로 정확한 순서 10,20,30,40을 확인합니다. 너무 일찍 검증하면 실패합니다. Back 또는 Reset으로 다시 시도할 수 있습니다.
+
+### size와 capacity
+
+size는 현재 원소 수, capacity는 재할당 없이 보관할 수 있는 원소 수입니다. 데모는 38번 시작 capacity를 3으로 잡고 공간이 부족하면 두 배로 늘립니다. 이 숫자는 실제 STL 구현에서 측정한 값이 아닙니다. 실제 초기 capacity와 증가 비율은 구현마다 다를 수 있습니다. 앱은 여전히 C11이며, std::vector를 컴파일해서 실행하는 기능이 추가된 것은 아닙니다.
+
+### 반복자 유효성
+
+- 재할당이 일어나면 기존 원소 반복자와 예전 end()가 모두 무효화됩니다.
+- push_back에 재할당이 없으면 앞선 원소 반복자는 유지되지만 예전 end()는 무효화됩니다.
+- erase는 삭제 위치와 그 뒤의 반복자를 무효화합니다. 앞의 반복자는 유지됩니다.
+- erase가 반환한 반복자는 다음 원소를 가리키거나, 마지막을 삭제했다면 새로운 end()입니다.
+- 같은 화면 위치에 20이 남아 보여도 예전 반복자를 그대로 읽으면 안 됩니다. 위치 숫자와 반복자 유효성은 다릅니다.
+
+### 파일과 핵심 함수
+
+stage8_SOO.h는 벡터의 값, size, capacity, 반복자 위치와 유효 상태를 정의합니다. stage8_SOO.c의 VectorPush는 공간을 확인하고, 필요한 경우 데모 저장소를 늘리면서 반복자를 무효화합니다. VectorErase는 뒤의 원소를 당기고, 기존 반복자를 무효화하거나 반환값으로 새 반복자를 줍니다. VectorRead는 무효 반복자와 end() 읽기를 차단합니다. VectorAdvance는 end()를 넘어가지 못하게 합니다.
+
+VectorBoss는 최종 미션의 찾기, 제거, 추가, 검증을 처리합니다. 단계가 맞지 않으면 오류를 알려줍니다. stage8_view_SOO.h의 BossAct는 조작 결과를 저장하고, Back은 이전 복사본으로 돌아갑니다. 기존 상태에서 다른 조작을 하면 그 위치부터 새로운 기록을 만듭니다. DrawStage8은 size/capacity, 반복자 표시, 예제 코드와 버튼을 그립니다.
+
+본 모듈은 최대 8개 원소의 안전한 C 시뮬레이션입니다. 실제 STL의 모든 동작을 구현한 것이 아니며, 사용자 C++ 코드를 실행하지 않습니다. 화면의 read(*it)는 값을 읽는 동작을 뜻하는 설명용 표기입니다.
+
+### 테스트
+
+test_stage8_SOO.c는 재할당 유무에 따른 push_back, 예전 end(), erase 앞/뒤 반복자, 마지막 원소 삭제, 빈 벡터, 잘못된 읽기, 최종 미션의 전체 흐름을 검사합니다. make -f Makefile_SOO test로 Stage 1–8을 함께 검사합니다.
+
+### English
+
+Levels 38–39 use prepared traces. Level 40 is interactive: scan to find 99, erase it using the returned iterator, finish the scan, append 40, then verify. Back and Reset allow retries.
+
+size counts elements; capacity counts storage available before reallocation. The demonstration doubles capacity from a chosen starting value, but this is not a required STL growth rule. Reallocation invalidates all old iterators. Without reallocation, push_back still invalidates the old end iterator. erase invalidates at and after the erased position. Its return can be end(), which must not be dereferenced.
+
+The app remains C11. VectorPush, VectorErase and VectorRead implement a bounded teaching model, not a full STL or a C++ runtime. The final mission records player actions for Back. Tests cover iterator lifetime rules and the full final repair sequence.
+
+Reference rules: https://eel.is/c++draft/vector.modifiers and https://eel.is/c++draft/vector.capacity
