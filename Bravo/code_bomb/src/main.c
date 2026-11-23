@@ -330,7 +330,12 @@ int main(int argc, char **argv)
                 mailroom_select_level(g.mailroom, variant - 1);
                 help_close();                   /* keep the shot clean */
             }
-            mailroom_qa(g.mailroom, level - 1, steps);
+            /* mode "play": run the answer live for steps / 10 seconds
+               mode "play": 정답을 steps / 10초 동안 실제로 재생 */
+            if (strcmp(mode, "play") == 0)
+                mailroom_qa_play(g.mailroom, steps / 10.0f);
+            else
+                mailroom_qa(g.mailroom, level - 1, steps);
         } else {
             g.screen = SCREEN_BOMB;
             arrays_qa(g.arrays, mode, level - 1, steps, variant);

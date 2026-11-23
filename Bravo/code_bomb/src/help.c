@@ -358,9 +358,10 @@ static const HelpDoc DOCS[HELP_TOPIC_COUNT] = {
           "Each bomb runs your run() function. A 1D bomb gives you cards[i] "
           "and N; a 2D bomb gives you grid[i][j], ROWS and COLS. A card is 0 "
           "(SAFE) or 1 (FAULT).\n"
-          "Make every card match the target written under it. Each read and "
-          "write costs 1 operation, and the display shows how many the bomb "
-          "allows.",
+          "Make every card match the target written under it. Then press Play "
+          "randomised: a new bomb with the same rule but different cards and a "
+          "different N appears, and your code runs on it. Code that only fixes "
+          "the cards you can see fails there; use N, ROWS and COLS.",
           "void run(void) {\n"
           "    for (int i = 0; i < N; i++) {\n"
           "        if (cards[i] == 1)   // 1 read\n"
@@ -368,7 +369,8 @@ static const HelpDoc DOCS[HELP_TOPIC_COUNT] = {
           "    }\n"
           "}",
           NULL, DIA_CARDS_COST,
-          "Read a card once into a variable if you need its value twice." },
+          "Each read and write costs 1 operation. A level is complete when the "
+          "bomb on screen AND a random bomb are defused." },
         { "Strikes and controls",
           "A strike happens when the code reads or writes outside the array "
           "(cards[N] or cards[-1]) or uses more operations than the budget. "
@@ -383,20 +385,25 @@ static const HelpDoc DOCS[HELP_TOPIC_COUNT] = {
           "\n"
           "macOS: Cmd+Enter, fn+F6, fn+F7, fn+F8",
           "CONTROLS", DIA_STRIKE,
-          "Levels 1-6 are untimed practice. Try things and break them." },
+          "Stuck? The Hint button next to MISSION gives three hints, one at a "
+          "time." },
         { "The Cube bomb challenge",
           "The Cube bomb is the timed challenge: five modules, one on each "
           "side, and a countdown on the top display. Press START to begin.\n"
           "Drag the cube to turn it and click a face to pick its module. Any "
           "run that ends in a strike, or ends with its module unsolved, sets "
-          "the bomb off. So does running out of time. Compile errors are "
-          "safe: fix them and run again.",
+          "the bomb off. So does running out of time. A module only counts as "
+          "defused if your code also defuses hidden random bombs, so code that "
+          "fixes single cards explodes. Compile errors and Play randomised are "
+          "safe.",
           "Practice bombs 1-6   untimed\n"
           "Cube bomb            10:00, five modules\n"
           "\n"
           "Strike or wrong result   BOOM\n"
+          "Fails a hidden random    BOOM\n"
           "Time runs out            BOOM\n"
-          "Compile error            safe, try again",
+          "Compile error            safe\n"
+          "Play randomised          safe practice",
           "RULES", DIA_CUBE_TIMER,
           "Read all five missions first: the easy modules buy you time for "
           "the hard ones." } }, 3, NULL },

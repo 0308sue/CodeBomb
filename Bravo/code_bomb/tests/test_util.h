@@ -24,5 +24,6 @@ void run_compiler_tests(void);
 void run_editor_tests(void);
 void run_bridge_tests(void);
 void run_level_tests(void);
+void run_variant_tests(void);
 
 #endif

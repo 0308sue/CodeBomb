@@ -766,6 +766,23 @@ void mailroom_draw(MailroomScreen *a)
     check_finished(a);
 }
 
+/* Screenshots of the animation: load the level's answer and play it live
+ * for `seconds` (at 1x) so a frame can be caught mid-action.
+ * 애니메이션 스크린샷: 레벨 정답을 불러와 seconds초 동안 실제로 재생한다. */
+void mailroom_qa_play(MailroomScreen *a, float seconds)
+{
+    load_code(a, a->level->reference);
+    watch_edits(a);
+    compile_now(a);
+    a->speed_index = 2;                 /* 4x / 4배속 */
+    start(a, RUN_GO);
+    for (float t = 0; t < seconds; t += 1.0f / 120.0f) {
+        tick(a, 1.0f / 120.0f);
+        check_finished(a);
+    }
+    update_markers(a);
+}
+
 void mailroom_qa(MailroomScreen *a, int demo, int steps)
 {
     /* demo 10+: Machine view; 20: Examples menu open

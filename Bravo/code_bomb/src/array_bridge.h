@@ -113,4 +113,20 @@ void array_tools_text(const SooLevel *level, char *buf, size_t n);
  * SOO_LEVELS[level]의 동작하는 정답 (테스트와 스크린샷용). */
 const char *array_example_solution(int level);
 
+/* Apply one event like SooApplyEvent, plus level 3's right-to-left rule for
+ * random copies of level 3 registered with array_mark_reverse().
+ * SooApplyEvent처럼 이벤트를 적용하고, array_mark_reverse()로 등록된 레벨 3의
+ * 무작위 복사본에는 오른쪽에서 왼쪽 규칙도 적용한다. */
+bool array_apply(SooState *state, SooEvent event);
+void array_mark_reverse(const SooLevel *level);
+void array_unmark_reverse(const SooLevel *level);
+
+/* Compile src for level, run it headless and play it to the end. Returns
+ * true when the bomb is defused; otherwise why says what went wrong.
+ * level에 맞게 src를 컴파일하고 화면 없이 실행해 끝까지 재생한다. 폭탄이
+ * 해체되면 true, 아니면 why에 이유를 적는다. */
+bool array_check_source(const char *src, int len, const SooLevel *level,
+                        Program *prog, VM *vm, ArrayTrace *t, char *why,
+                        size_t n);
+
 #endif

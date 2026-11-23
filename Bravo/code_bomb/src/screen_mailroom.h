@@ -32,6 +32,10 @@ void mailroom_qa(MailroomScreen *m, int demo, int steps);
  * built yet. / 우편실 레벨 칸 0-10을 연다. 아직 없으면 false. */
 bool mailroom_select_level(MailroomScreen *m, int slot);
 
+/* Screenshots: play the level's answer live for `seconds`.
+ * 스크린샷: 레벨 정답을 seconds초 동안 실제로 재생한다. */
+void mailroom_qa_play(MailroomScreen *m, float seconds);
+
 /* The field manual topic for the open level (a HelpTopic value).
  * 열린 레벨의 현장 매뉴얼 주제 (HelpTopic 값). */
 int  mailroom_help_topic(const MailroomScreen *m);

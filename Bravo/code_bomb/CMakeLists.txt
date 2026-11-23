@@ -46,6 +46,7 @@ endif()
 add_library(cb_core STATIC
     src/vm.c src/levels.c src/programs.c src/lexer.c src/parser.c
     src/compiler.c src/editor.c src/array_bridge.c src/bomb_modules.c
+    src/bomb_variants.c
     ${SOO_DIR}/array_core_SOO.c)
 target_include_directories(cb_core PUBLIC src ${SOO_DIR})
 if (NOT MSVC)
@@ -75,6 +76,7 @@ add_custom_command(TARGET codebomb POST_BUILD
 enable_testing()
 add_executable(cb_tests
     tests/test_main.c tests/test_vm.c tests/test_compiler.c
-    tests/test_editor.c tests/test_bridge.c tests/test_levels.c)
+    tests/test_editor.c tests/test_bridge.c tests/test_levels.c
+    tests/test_variants.c)
 target_link_libraries(cb_tests PRIVATE cb_core)
 add_test(NAME cb_tests COMMAND cb_tests)

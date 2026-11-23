@@ -44,7 +44,7 @@ between full screen and a window.
 |---|---|---|
 | Missions | The mission map (the game opens here): Sumin's 8 chapters and 40 lessons, plus a Bomb defusal row | `screen_missions.c` + her `roadmap_SOO.h` |
 | Missions → 01-40 | Sumin's lessons, her screens drawn at 1.5x | `soo_lessons.c` + her `main_SOO.c` and `stage*_SOO` files |
-| Bomb → Levels 1-6 | Untimed practice: write C for each of Sumin's 6 levels on a flat bomb; the bomb replays your code | editor + `array_bridge.c` + `bomb3d.c` + Sumin's engine |
+| Bomb → Levels 1-6 | Untimed practice: write C for each of Sumin's 6 levels on a flat bomb; the bomb replays your code. Play randomised (F9) runs it on a new random bomb with the same rule; Hint gives three hints | editor + `array_bridge.c` + `bomb3d.c` + Sumin's engine |
 | Bomb → Cube bomb | The timed challenge: press START, defuse 5 modules in 10:00 with the countdown on the bomb; a wrong run or time-out explodes it, then RESTART | `screen_arrays.c` + `bomb3d.c` |
 | Bomb → Predict / Explore / Find the bug | Sumin's modes, unchanged logic (levels 1-6 only) | ported from `main_SOO.c` |
 | Mailroom | Levels with the 3D robot: 1 Mailroom, 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown (the rest of `docs/MAILROOM.md` is shown dimmed) | editor + VM + `levels.c` |
@@ -76,7 +76,7 @@ and 1 (FAULT).
 ### Tests
 
 ```sh
-make test        # 237 checks, no raylib needed
+make test        # 326 checks, no raylib needed
 make test-asan   # the same with Address/UB sanitizers (macOS/Linux)
 ```
 
@@ -103,6 +103,7 @@ pause, arrows to step, R to restart. **Missions** returns to the map.
 | `src/screen_missions.*` | Mission map built from her `roadmap_SOO.h` |
 | `src/soo_lessons.*` | Hosts her 40 lessons unchanged, scaled 1.5x (see `docs/INTEGRATION.md`) |
 | `src/help.*` | Field manual pages, diagrams and the Help pop-up |
+| `src/bomb_variants.*` | Random bombs with the same rule, and the hints |
 | `src/screen_mailroom.*`, `src/scene_mailroom.c` | Level 1 with the 3D scene |
 | `src/ui.*` | Shared theme, buttons and text (Sumin's palette and widgets) |
 | `src/main.c` | Window, 1920 x 1200 canvas scaling, tabs (Missions, Bomb, Mailroom) |
@@ -161,7 +162,7 @@ cmake --build build-cmake --config Release
 |---|---|---|
 | Missions | 미션 지도 (게임이 여기서 시작): 수민의 8개 챕터와 40개 수업, 그리고 폭탄 해체 줄 | `screen_missions.c` + 수민의 `roadmap_SOO.h` |
 | Missions → 01-40 | 수민의 수업, 수민의 화면을 1.5배로 그림 | `soo_lessons.c` + 수민의 `main_SOO.c`와 `stage*_SOO` 파일 |
-| Bomb → Levels 1-6 | 시간 제한 없는 연습: 납작한 폭탄에서 수민의 6개 레벨을 C로 풀면 폭탄이 코드를 재생 | 에디터 + `array_bridge.c` + `bomb3d.c` + 수민의 엔진 |
+| Bomb → Levels 1-6 | 시간 제한 없는 연습: 납작한 폭탄에서 수민의 6개 레벨을 C로 풀면 폭탄이 코드를 재생. Play randomised (F9)는 같은 규칙의 새 무작위 폭탄에서 실행, Hint는 힌트 세 개 | 에디터 + `array_bridge.c` + `bomb3d.c` + 수민의 엔진 |
 | Bomb → Cube bomb | 시간 제한 도전: START를 누르고 폭탄의 카운트다운 10:00 안에 모듈 5개를 해체. 잘못된 실행이나 시간 초과는 폭발, 그 뒤 RESTART | `screen_arrays.c` + `bomb3d.c` |
 | Bomb → Predict / Explore / Find the bug | 수민의 모드, 로직 그대로 (레벨 1-6만) | `main_SOO.c`에서 옮김 |
 | Mailroom | 3D 로봇이 있는 레벨: 1 Mailroom, 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown (`docs/MAILROOM.md`의 나머지는 흐리게 표시) | 에디터 + VM + `levels.c` |
@@ -193,7 +194,7 @@ Write code 모드에서는 1D 레벨에서 `cards[i]`와 `N`, 2D 레벨에서
 ### 테스트
 
 ```sh
-make test        # 237개 검사, raylib 불필요
+make test        # 326개 검사, raylib 불필요
 make test-asan   # 같은 검사를 Address/UB 새니타이저로 (macOS/Linux)
 ```
 
@@ -219,6 +220,7 @@ make test-asan   # 같은 검사를 Address/UB 새니타이저로 (macOS/Linux)
 | `src/screen_missions.*` | 수민의 `roadmap_SOO.h`로 만든 미션 지도 |
 | `src/soo_lessons.*` | 수민의 40개 수업을 수정 없이 1.5배로 실행 (`docs/INTEGRATION.md` 참고) |
 | `src/help.*` | 현장 매뉴얼 페이지, 그림, Help 팝업 |
+| `src/bomb_variants.*` | 같은 규칙의 무작위 폭탄과 힌트 |
 | `src/screen_mailroom.*`, `src/scene_mailroom.c` | 3D 장면이 있는 레벨 1 |
 | `src/ui.*` | 공용 테마, 버튼, 텍스트 (수민의 색상표와 위젯) |
 | `src/main.c` | 창, 1920 x 1200 캔버스 배율, 탭 (Missions, Bomb, Mailroom) |

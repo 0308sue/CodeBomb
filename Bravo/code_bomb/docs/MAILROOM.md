@@ -10,6 +10,15 @@
 | 2 | **Done:** 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown. |
 | 3-5 | Not started. |
 
+**Robot animation (done).** The robot keeps every parcel it takes in a stack
+in its arms instead of dropping the old one. On `put(n)` it gets parcel n
+ready where it stands, before walking: if it holds a parcel stamped n it
+keeps that one and the others fly into a recycling bin; if its parcels add
+up to n they slide together and merge, with a pulse, a glow, sparks and a
+"10 + 7 = 17" pop-up; otherwise its parcel is restamped, or a new parcel
+pops into its hands ("new 2"). The number is on the parcel before the robot
+walks to the outbox.
+
 Each phase 2 level has a starter, a one-line goal, a two-page Help topic
 with a diagram of what goes in and comes out, and two programs in its
 Examples menu that show typical mistakes (never the answer). A reference
@@ -123,6 +132,14 @@ says, and `--shot mailroom - N` screenshots are checked visually.
 | 1 | 일부 완료: 레벨 목록 (`levels.c`의 `LEVEL_LIST`), 우편실 화면의 레벨 줄 (계획된 레벨은 흐리게, Submit을 통과하면 초록 점), 레벨별 코드 저장, 레벨별 도움말 주제. 남은 것: 별, 미션 지도의 진행 상황. |
 | 2 | **완료:** 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown. |
 | 3-5 | 시작 안 함. |
+
+**로봇 애니메이션 (완료).** 로봇은 이전 상자를 떨어뜨리지 않고 가져온 상자를
+모두 팔에 쌓아 듭니다. `put(n)`에서는 걷기 전에 그 자리에서 n 상자를
+준비합니다: n이 찍힌 상자를 들고 있으면 그것만 남기고 나머지는 재활용 통으로
+날아가고, 상자들을 더해 n이 되면 하나로 합쳐지며 번쩍이고 빛나고 불꽃과
+"10 + 7 = 17" 팝업이 나오며, 그 밖에는 상자에 숫자를 다시 찍거나 새 상자가
+손에 나타납니다 ("new 2"). 로봇이 출력함으로 걷기 전에 숫자가 이미 상자에
+있습니다.
 
 2단계 레벨마다 시작 코드, 한 줄 목표, 들어오고 나가는 것을 보여 주는 그림이
 있는 두 쪽짜리 도움말, 흔한 실수를 보여 주는 Examples 메뉴의 프로그램 두

@@ -36,6 +36,7 @@
 #include "array_bridge.h"
 #include "bomb3d.h"
 #include "bomb_modules.h"
+#include "bomb_variants.h"
 #include "compiler.h"
 #include "editor.h"
 #include "quiz_SOO.h"
@@ -57,6 +58,9 @@ typedef enum { CH_READY, CH_RUNNING, CH_FUSE, CH_EXPLODED, CH_DEFUSED }
 #define RESTART_DELAY   1.6f     /* let the explosion play first
                                     폭발을 먼저 보여 준다 */
 #define ALERT_SECONDS   30.0f    /* display blinks / 표시창 깜박임 */
+#define HIDDEN_CHECKS   4        /* random bombs a cube module must also
+                                    defuse / 큐브 모듈이 추가로 해체해야 하는
+                                    무작위 폭탄 수 */
 
 #define LEVEL_CUBE  SOO_LEVEL_COUNT            /* index of the cube bomb */
 #define LEVEL_TOTAL (SOO_LEVEL_COUNT + 1)
@@ -121,6 +125,22 @@ struct ArraysScreen {
     float              phase_t;          /* seconds in FUSE / EXPLODED */
     char               boom_reason[200];
     float              qa_settle;        /* screenshot override / 스크린샷용 */
+
+    /* Random bombs: same rule, new cards and size. The code is compiled
+     * and recorded before the bomb is shown.
+     * 무작위 폭탄: 같은 규칙, 새 카드와 크기. 코드는 폭탄을 보여 주기 전에
+     * 컴파일하고 기록한다. */
+    bool               random_mode;      /* a random bomb is on the table */
+    BombVariant        variant;
+    unsigned           seeds[BOMB_KIND_COUNT];
+    int                random_wins[BOMB_KIND_COUNT];
+    bool               shown_ok[BOMB_KIND_COUNT];
+    int                hints_shown[BOMB_KIND_COUNT];
+    bool               hint_open;
+    unsigned           hidden_round;     /* new hidden bombs each check */
+    Program           *scratch_prog;     /* for hidden checks / 숨은 검사용 */
+    VM                *scratch_vm;
+    ArrayTrace        *scratch_trace;
 };
 
 static const SooLevel *cur_level(const ArraysScreen *a)
@@ -141,6 +161,19 @@ static bool locked(const ArraysScreen *a)
 }
 
 static void challenge_fail(ArraysScreen *a, const char *reason);
+
+static BombKind kind_of(const ArraysScreen *a)
+{
+    return is_cube(a) ? bomb_kind_for_module(a->module)
+                      : bomb_kind_for_level(a->level);
+}
+
+/* The bomb the cards are on: the random one or the one on screen.
+ * 카드가 놓인 폭탄: 무작위 폭탄 또는 화면의 폭탄. */
+static const SooLevel *active_level(const ArraysScreen *a)
+{
+    return a->random_mode ? &a->variant.level : cur_level(a);
+}
 
 /* ========================================================================
  * Sumin's sample logic (unchanged behaviour) / 수민의 샘플 로직 (동작 동일)
@@ -235,7 +268,22 @@ static void code_clear_run(ArraysScreen *a)
     a->ccursor = 0;
     a->ctimer = 0;
     a->note[0] = '\0';
-    SooReset(&a->cstate, cur_level(a));
+    SooReset(&a->cstate, active_level(a));
+}
+
+/* Back to the bomb on screen (after editing, Run, or a level change).
+ * 화면의 폭탄으로 돌아간다 (수정, Run, 레벨 변경 뒤). */
+static void exit_random(ArraysScreen *a)
+{
+    if (!a->random_mode) return;
+    a->random_mode = false;
+    array_unmark_reverse(&a->variant.level);
+    a->have_trace = false;
+    a->cplaying = false;
+    a->ccursor = 0;
+    a->compiled_version = a->ed->version - 1;
+    if (is_cube(a)) a->cstate = a->module_state[a->module];
+    else SooReset(&a->cstate, cur_level(a));
 }
 
 /* Put the saved code in the editor, cursor inside run(). A cube module
@@ -258,6 +306,7 @@ static void code_load(ArraysScreen *a)
 
 static void code_save(ArraysScreen *a)
 {
+    exit_random(a);
     memcpy(code_slot(a), a->ed->text, (size_t)a->ed->len + 1);
     if (is_cube(a)) a->module_state[a->module] = a->cstate;
 }
@@ -301,8 +350,57 @@ static bool code_prepare(ArraysScreen *a)
 
 static void code_step(ArraysScreen *a)
 {
-    if (array_playback_step(a->ctrace, &a->cstate, &a->ccursor) &&
-        a->cstate.status == SOO_SUCCESS) {
+    bool applied = array_playback_step(a->ctrace, &a->cstate, &a->ccursor);
+    BombKind kind = kind_of(a);
+    if (applied && a->random_mode && a->cstate.status == SOO_SUCCESS) {
+        /* a random bomb defused / 무작위 폭탄 해체 */
+        a->random_wins[kind]++;
+        if (!is_cube(a) && a->shown_ok[kind]) a->completed[a->level] = true;
+        snprintf(a->cstate.message, sizeof a->cstate.message,
+                 "Random bomb #%u defused too. Your code follows the rule%s",
+                 a->variant.seed,
+                 a->shown_ok[kind] ? ". Press Play randomised for another."
+                                   : ": now press Run for the bomb on screen.");
+    } else if (applied && a->random_mode && a->cstate.status == SOO_FAILURE &&
+               a->shown_ok[kind]) {
+        size_t used = strlen(a->cstate.message);
+        snprintf(a->cstate.message + used, sizeof a->cstate.message - used,
+                 " Your code works on the bomb on screen, not on this one.");
+    } else if (applied && !a->random_mode &&
+               a->cstate.status == SOO_SUCCESS) {
+        a->shown_ok[kind] = true;
+        if (is_cube(a) && a->phase == CH_RUNNING) {
+            /* A module also has to defuse hidden random bombs.
+             * 모듈은 숨은 무작위 폭탄도 해체해야 한다. */
+            char why[160];
+            for (int k = 0; k < HIDDEN_CHECKS; ++k) {
+                BombVariant hv;
+                bomb_variant_make(&hv, kind, 1000u + a->hidden_round * 16u +
+                                                 (unsigned)k);
+                bool ok = array_check_source(a->ed->text, a->ed->len,
+                                             &hv.level, a->scratch_prog,
+                                             a->scratch_vm, a->scratch_trace,
+                                             why, sizeof why);
+                array_unmark_reverse(&hv.level);
+                if (!ok) {
+                    a->hidden_round++;
+                    challenge_fail(a, TextFormat(
+                        "Module %d (%s) works on this bomb but not on a "
+                        "random one (%s = %d): %s Code must work for any "
+                        "bomb.",
+                        a->module + 1, cube_module_name(a->module),
+                        hv.level.rows == 1 ? "N" : "ROWS",
+                        hv.level.rows == 1 ? hv.level.cols : hv.level.rows,
+                        why));
+                    if (code_done(a)) a->cplaying = false;
+                    return;
+                }
+            }
+        }
+        if (!is_cube(a) && a->random_wins[kind] == 0)
+            snprintf(a->cstate.message, sizeof a->cstate.message,
+                     "This bomb is defused. Now press Play randomised: does "
+                     "your code work on any bomb like it?");
         if (is_cube(a)) {
             a->module_done[a->module] = true;
             a->module_state[a->module] = a->cstate;
@@ -313,16 +411,17 @@ static void code_step(ArraysScreen *a)
                 a->completed[LEVEL_CUBE] = true;
                 if (a->phase == CH_RUNNING) a->phase = CH_DEFUSED;
             }
-        } else {
+        } else if (a->random_wins[kind] > 0) {
             a->completed[a->level] = true;
         }
     }
     if (code_done(a)) a->cplaying = false;
 
-    /* In the challenge a failed run sets the bomb off.
-     * 도전 중에는 실패한 실행이 폭탄을 터뜨린다. */
+    /* In the challenge a failed run sets the bomb off (random practice
+     * bombs are safe). / 도전 중에는 실패한 실행이 폭탄을 터뜨린다 (무작위
+     * 연습 폭탄은 안전). */
     if (is_cube(a) && a->phase == CH_RUNNING && code_done(a) &&
-        a->cstate.status != SOO_SUCCESS) {
+        !a->random_mode && a->cstate.status != SOO_SUCCESS) {
         const char *why = a->cstate.status == SOO_FAILURE
                               ? a->cstate.message
                               : "The code finished, but the cards don't match "
@@ -339,6 +438,7 @@ static void code_run(ArraysScreen *a)
         a->cplaying = false;
         return;
     }
+    exit_random(a);             /* Run = the bomb on screen / Run = 화면 폭탄 */
     if (!code_prepare(a)) return;
     if (code_done(a)) array_playback_to(a->ctrace, &a->cstate, &a->ccursor, 0);
     a->cplaying = true;
@@ -364,7 +464,7 @@ static void code_reset(ArraysScreen *a)
 {
     a->cplaying = false;
     a->ccursor = 0;
-    SooReset(&a->cstate, cur_level(a));
+    SooReset(&a->cstate, active_level(a));
     if (code_fresh(a))
         snprintf(a->cstate.message, sizeof a->cstate.message,
                  "Back to the start. Press Run or Step to replay.");
@@ -374,6 +474,12 @@ static void code_watch_edits(ArraysScreen *a)
 {
     if (a->ed->version == a->seen_version) return;
     a->seen_version = a->ed->version;
+    if (a->random_mode) {
+        exit_random(a);
+        snprintf(a->note, sizeof a->note,
+                 "Code changed. Back to the bomb on screen.");
+        return;
+    }
     if (a->have_trace && (a->ccursor > 0 || a->cplaying)) {
         a->cplaying = false;
         a->ccursor = 0;
@@ -396,6 +502,52 @@ static void code_update_markers(ArraysScreen *a)
         if (a->cstate.status == SOO_FAILURE) ed->error_line = line;
         else if (a->cstate.status != SOO_SUCCESS) ed->exec_line = line;
     }
+}
+
+/* Play randomised: a new random bomb with the same rule. The code is
+ * compiled and recorded first, then the bomb appears and the run plays,
+ * so the code can't be changed to fit it.
+ * 무작위 실행: 같은 규칙의 새 무작위 폭탄. 코드를 먼저 컴파일하고 기록한
+ * 뒤에 폭탄이 나타나고 실행이 재생되므로, 코드를 폭탄에 맞춰 바꿀 수 없다. */
+static void play_random(ArraysScreen *a)
+{
+    if (locked(a) || a->mode != MODE_CODE) return;
+    BombKind kind = kind_of(a);
+    if (a->random_mode) array_unmark_reverse(&a->variant.level);
+    a->seeds[kind]++;
+    bomb_variant_make(&a->variant, kind, a->seeds[kind]);
+
+    prog_init(a->prog);
+    array_register_level(a->prog, &a->variant.level);
+    a->compiled_version = a->ed->version;
+    a->compiled_ok = compile_program(a->ed->text, a->ed->len, a->prog,
+                                     &a->compile);
+    if (!a->compiled_ok) {
+        array_unmark_reverse(&a->variant.level);
+        a->random_mode = false;
+        a->have_trace = false;
+        snprintf(a->note, sizeof a->note, "Line %d, column %d: %.200s",
+                 a->compile.line, a->compile.col, a->compile.message);
+        return;
+    }
+    a->random_mode = true;
+    array_record(a->ctrace, a->prog, &a->variant.level, a->vm);
+    a->have_trace = true;
+    a->note[0] = '\0';
+    SooReset(&a->cstate, &a->variant.level);
+    a->ccursor = 0;
+    a->cplaying = true;
+    a->ctimer = a->interval;
+    const SooLevel *l = &a->variant.level;
+    if (l->rows == 1)
+        snprintf(a->cstate.message, sizeof a->cstate.message,
+                 "Random bomb #%u: N = %d. Your code is running on it.",
+                 a->variant.seed, l->cols);
+    else
+        snprintf(a->cstate.message, sizeof a->cstate.message,
+                 "Random bomb #%u: ROWS = %d, COLS = %d. Your code is running "
+                 "on it.", a->variant.seed, l->rows, l->cols);
+    a->ed->focused = true;
 }
 
 /* ========================================================================
@@ -624,6 +776,7 @@ static void select_module(ArraysScreen *a, int module)
     if (!is_cube(a) || module == a->module || module < 0 ||
         module >= CUBE_MODULE_COUNT)
         return;
+    a->hint_open = false;
     code_save(a);
     a->module = module;
     code_load(a);
@@ -634,6 +787,7 @@ static void select_module(ArraysScreen *a, int module)
 static void set_mode(ArraysScreen *a, ArraysMode mode)
 {
     if (a->mode == mode) return;
+    a->hint_open = false;
     if (a->mode == MODE_CODE) {
         code_save(a);
         a->cplaying = false;
@@ -663,6 +817,7 @@ static void set_level(ArraysScreen *a, int level)
         set_mode(a, MODE_CODE);
         if (level == a->level) return;
     }
+    a->hint_open = false;
     if (a->mode == MODE_CODE) code_save(a);
     if (is_cube(a)) challenge_abandon(a);
     a->level = level;
@@ -738,8 +893,12 @@ ArraysScreen *arrays_create(const EditorStyle *style)
     a->prog = calloc(1, sizeof *a->prog);
     a->vm = calloc(1, sizeof *a->vm);
     a->ctrace = calloc(1, sizeof *a->ctrace);
+    a->scratch_prog = calloc(1, sizeof *a->scratch_prog);
+    a->scratch_vm = calloc(1, sizeof *a->scratch_vm);
+    a->scratch_trace = calloc(1, sizeof *a->scratch_trace);
     a->bomb = bomb_view_create((int)LEFT.width, (int)LEFT.height);
-    bool ok = a->ed && a->prog && a->vm && a->ctrace && a->bomb;
+    bool ok = a->ed && a->prog && a->vm && a->ctrace && a->bomb &&
+              a->scratch_prog && a->scratch_vm && a->scratch_trace;
     for (int n = 0; n < SOO_LEVEL_COUNT && ok; n++) {
         a->code[n] = calloc(1, ED_MAX_TEXT);
         if (!a->code[n]) ok = false;
@@ -774,6 +933,10 @@ void arrays_destroy(ArraysScreen *a)
     for (int n = 0; n < SOO_LEVEL_COUNT; n++) free(a->code[n]);
     for (int m = 0; m < CUBE_MODULE_COUNT; m++) free(a->cube_code[m]);
     bomb_view_destroy(a->bomb);
+    if (a->random_mode) array_unmark_reverse(&a->variant.level);
+    free(a->scratch_trace);
+    free(a->scratch_vm);
+    free(a->scratch_prog);
     free(a->ctrace);
     free(a->vm);
     free(a->prog);
@@ -788,7 +951,9 @@ bool arrays_typing(const ArraysScreen *a)
 
 void arrays_leave(ArraysScreen *a)
 {
+    if (a->mode == MODE_CODE) exit_random(a);
     if (is_cube(a)) challenge_abandon(a);
+    a->hint_open = false;
     a->playing = false;
     a->cplaying = false;
     a->ed->focused = false;
@@ -820,7 +985,10 @@ void arrays_update(ArraysScreen *a, float dt)
         while (GetCharPressed() > 0) {
         }
     } else if (a->mode == MODE_CODE) {
-        editor_ui_update(a->ed, code_editor_rect(a), a->style);
+        /* the hint card covers the editor while it is open
+           힌트 카드가 열려 있으면 에디터를 덮는다 */
+        if (!a->hint_open)
+            editor_ui_update(a->ed, code_editor_rect(a), a->style);
         /* Turning or clicking the bomb keeps the editor focused, so typing
          * still goes into the code. Single-letter shortcuts are off in this
          * mode for the same reason.
@@ -835,6 +1003,7 @@ void arrays_update(ArraysScreen *a, float dt)
         if (IsKeyPressed(KEY_F6)) code_step_key(a);
         if (IsKeyPressed(KEY_F7)) code_back(a);
         if (IsKeyPressed(KEY_F8)) code_reset(a);
+        if (IsKeyPressed(KEY_F9)) play_random(a);
         if (a->cplaying) {
             a->ctimer += dt;
             if (a->ctimer >= a->interval) {
@@ -960,6 +1129,23 @@ static void draw_bomb_panel(ArraysScreen *a, const char *heading, Color hcol,
                       (int)(LEFT.x + LEFT.width) - 24, (int)LEFT.y + 24,
                       FS_SMALL, UI_MUTED);
     }
+    if (a->mode == MODE_CODE && !is_cube(a)) {
+        /* this bomb / random bombs progress / 이 폭탄 / 무작위 폭탄 진행 */
+        BombKind k = kind_of(a);
+        int x = (int)(LEFT.x + LEFT.width) - 24;
+        if (a->random_mode)
+            ui_text_right(TextFormat("RANDOM BOMB #%u", a->variant.seed), x,
+                          (int)LEFT.y + 18, FS_BODY, UI_PINK);
+        else
+            ui_text_right("THE BOMB ON SCREEN", x, (int)LEFT.y + 18, FS_BODY,
+                          UI_INK);
+        ui_text_right(TextFormat("This bomb: %s     Random bombs defused: %d",
+                                 a->shown_ok[k] ? "done" : "not yet",
+                                 a->random_wins[k]),
+                      x, (int)LEFT.y + 56, FS_SMALL,
+                      a->shown_ok[k] && a->random_wins[k] ? UI_SUCCESS
+                                                         : UI_MUTED);
+    }
 
     int y = (int)(LEFT.y + LEFT.height) - 96;
     DrawText(heading, (int)LEFT.x + 24, y, FS_SMALL, hcol);
@@ -1031,6 +1217,50 @@ static void draw_challenge_overlay(ArraysScreen *a)
     }
 }
 
+/* Hint button on the MISSION line, and the card with the hints shown so
+ * far. Hints come one at a time, from gentle to almost the answer.
+ * MISSION 줄의 힌트 버튼과 지금까지 연 힌트 카드. 힌트는 하나씩, 가벼운
+ * 것부터 거의 정답까지 나온다. */
+static void draw_hints(ArraysScreen *a, int mission_y)
+{
+    BombKind k = kind_of(a);
+    Rectangle btn = { RX + RW - 170, (float)mission_y - 10, 170, 40 };
+    if (ui_button(btn, TextFormat("Hint  %d/%d", a->hints_shown[k], BOMB_HINTS),
+                  true, a->hint_open)) {
+        a->hint_open = !a->hint_open;
+        if (a->hint_open && a->hints_shown[k] == 0) a->hints_shown[k] = 1;
+        return;
+    }
+    if (!a->hint_open) return;
+
+    int lines = 0;
+    for (int h = 0; h < a->hints_shown[k]; ++h)
+        lines += ui_wrapped_height(bomb_hint(k, h), RW - 80, FS_SMALL) + 16;
+    /* below the mission text, so both can be read / 미션 글 아래에 */
+    Rectangle card = { RX - 8, code_editor_rect(a).y - 4, RW + 16,
+                       (float)lines + 110 };
+    DrawRectangleRounded((Rectangle){ card.x, card.y + 6, card.width,
+                                      card.height },
+                         0.06f, 8, (Color){ 10, 6, 20, 200 });
+    DrawRectangleRounded(card, 0.06f, 8, UI_PANEL);
+    DrawRectangleRoundedLinesEx(card, 0.06f, 8, 2.0f, UI_ACCENT);
+    int y = (int)card.y + 20;
+    for (int h = 0; h < a->hints_shown[k]; ++h) {
+        DrawText(TextFormat("%d", h + 1), (int)card.x + 24, y, FS_SMALL,
+                 UI_ACCENT);
+        y = ui_wrapped(bomb_hint(k, h), (int)card.x + 60, y, RW - 80, FS_SMALL,
+                       UI_INK) + 16;
+    }
+    bool more = a->hints_shown[k] < BOMB_HINTS;
+    Rectangle next = { card.x + 24, card.y + card.height - 66, 240, 48 };
+    if (more && ui_button(next, "Next hint", true, false)) a->hints_shown[k]++;
+    if (!more)
+        DrawText("That's every hint for this bomb.", (int)next.x,
+                 (int)next.y + 14, FS_SMALL, UI_MUTED);
+    Rectangle close = { card.x + card.width - 164, next.y, 140, 48 };
+    if (ui_button(close, "Close", true, false)) a->hint_open = false;
+}
+
 static void draw_code_mode(ArraysScreen *a)
 {
     const SooState *st = &a->cstate;
@@ -1092,9 +1322,12 @@ static void draw_code_mode(ArraysScreen *a)
                            UI_SUCCESS);
         }
     }
-    int y = mission_text(RTOP + chips_height(a), cur_level(a)->objective) + 8;
+    int mission_y = RTOP + chips_height(a);
+    int y = mission_text(mission_y, cur_level(a)->objective) + 8;
     char tools[96];
-    array_tools_text(cur_level(a), tools, sizeof tools);
+    array_tools_text(active_level(a), tools, sizeof tools);   /* sizes of the
+                                                  bomb on the table / 탁자 위
+                                                  폭탄의 크기 */
     DrawText(TextFormat("You can use   %s", tools), RX, y, FS_SMALL, UI_MUTED);
     editor_ui_draw(a->ed, code_editor_rect(a), a->style);
     if (locked(a)) {
@@ -1114,6 +1347,11 @@ static void draw_code_mode(ArraysScreen *a)
             a->interval = SPEEDS[n];
             a->ed->focused = true;
         }
+    if (ui_button((Rectangle){ 700, ROW_Y, 450, ROW_H },
+                  "Play randomised  (F9)", !locked(a), a->random_mode)) {
+        play_random(a);
+        a->ed->focused = true;
+    }
 
     float bw = (RIGHT.width - 3 * 14) / 4;
     bool can_step = (!code_fresh(a) || !code_done(a)) && !locked(a);
@@ -1150,6 +1388,7 @@ static void draw_code_mode(ArraysScreen *a)
 #endif
     ui_text_right(keys, (int)(RIGHT.x + RIGHT.width), HINT_Y, FS_SMALL,
                   UI_MUTED);
+    draw_hints(a, mission_y);       /* on top of the editor / 에디터 위에 */
 }
 
 static void draw_sample_mode(ArraysScreen *a)
@@ -1246,6 +1485,24 @@ void arrays_qa(ArraysScreen *a, const char *mode, int level, int steps,
             a->phase = CH_RUNNING;
             a->time_left = variant == 43 ? 24.0f : 412.0f;
         }
+        if (variant == 44 || variant == 45) {
+            /* 44: Mirror's hint card; 45: a random Mirror bomb
+               44: Mirror 힌트 카드; 45: 무작위 Mirror 폭탄 */
+            select_module(a, 2);
+            if (variant == 44) {
+                a->hint_open = true;
+                a->hints_shown[BOMB_MIRROR] = 2;
+            } else {
+                qa_play(a, cube_example_solution(2), 1000);
+                play_random(a);
+                a->cplaying = false;
+                for (int k = 0; k < steps; k++) code_step(a);
+            }
+            bomb_view_select(a->bomb, a->module, false);
+            code_update_markers(a);
+            build_scene(a);
+            return;
+        }
         if (variant >= 40 && variant <= 42) {
             select_module(a, 2);
             a->phase = CH_EXPLODED;
@@ -1270,6 +1527,31 @@ void arrays_qa(ArraysScreen *a, const char *mode, int level, int steps,
         }
         if (steps > 0) qa_play(a, cube_example_solution(a->module), steps);
         bomb_view_select(a->bomb, a->module, false);
+        code_update_markers(a);
+    } else if (m == MODE_CODE && variant >= 5 && variant <= 7) {
+        /* 5: the answer on a random bomb; 6: card-by-card code on a random
+         * bomb (level 2); 7: the hint card
+         * 5: 무작위 폭탄의 정답; 6: 무작위 폭탄의 카드별 코드 (레벨 2);
+         * 7: 힌트 카드 */
+        const char *src = array_example_solution(a->level);
+        if (variant == 6)
+            src = "void run(void) {\n"
+                  "    cards[0] = 0;\n"
+                  "    cards[2] = 0;\n"
+                  "    cards[3] = 0;\n"
+                  "    cards[5] = 0;\n"
+                  "    cards[7] = 0;\n"
+                  "}\n";
+        if (variant == 7) {
+            a->hint_open = true;
+            a->hints_shown[kind_of(a)] = 2;
+        } else {
+            qa_play(a, src, 1000);
+            play_random(a);
+            a->cplaying = false;
+            for (int k = 0; k < steps; k++) code_step(a);
+        }
+        a->ed->focused = false;
         code_update_markers(a);
     } else if (m == MODE_CODE) {
         const char *src = array_example_solution(a->level);
@@ -1360,6 +1642,62 @@ int arrays_self_test(ArraysScreen *a)
     challenge_start(a);
     st_run(a, "void run(void) {\n    cards[N] = 1;\n}\n");
     failures += st_check(a->phase == CH_FUSE, "an out-of-bounds strike explodes:");
+
+    /* Module 1 (Invert) on screen is 1 0 0 1 1 0. Setting those six cards
+     * one by one defuses the shown module but not a random one.
+     * 화면의 모듈 1 (Invert)은 1 0 0 1 1 0이다. 카드 여섯 장을 하나씩 바꾸면
+     * 화면의 모듈은 해체되지만 무작위 모듈은 아니다. */
+    challenge_start(a);
+    select_module(a, 0);
+    st_run(a, "void run(void) {\n"
+              "    cards[0] = 0; cards[1] = 1; cards[2] = 1;\n"
+              "    cards[3] = 0; cards[4] = 0; cards[5] = 1;\n"
+              "}\n");
+    failures += st_check(a->phase == CH_FUSE && !a->module_done[0],
+                         "card-by-card code explodes (fails hidden random "
+                         "bombs):");
+
+    challenge_start(a);
+    select_module(a, 0);
+    play_random(a);
+    for (int k = 0; k < 2000 && a->cplaying; k++) code_step(a);
+    failures += st_check(a->phase == CH_RUNNING,
+                         "a failed Play randomised is safe in the challenge:");
+    st_run(a, cube_example_solution(0));
+    play_random(a);
+    for (int k = 0; k < 2000 && a->cplaying; k++) code_step(a);
+    failures += st_check(a->random_wins[BOMB_INVERT] > 0 && a->random_mode,
+                         "a working answer defuses a random bomb:");
+    exit_random(a);
+
+    /* Practice level 2: the bomb on screen alone doesn't complete it.
+     * 연습 레벨 2: 화면의 폭탄만으로는 완료되지 않는다. */
+    puts("Practice bombs and random bombs:");
+    set_level(a, 1);
+    st_run(a, "void run(void) {\n"
+              "    cards[0] = 0; cards[2] = 0; cards[3] = 0;\n"
+              "    cards[5] = 0; cards[7] = 0;\n"
+              "}\n");
+    failures += st_check(a->shown_ok[BOMB_L2] && !a->completed[1],
+                         "card-by-card code defuses the shown bomb only:");
+    bool caught = false;
+    for (int k = 0; k < 5 && !caught; k++) {
+        play_random(a);
+        for (int s = 0; s < 2000 && a->cplaying; s++) code_step(a);
+        if (a->cstate.status == SOO_FAILURE) caught = true;
+    }
+    failures += st_check(caught && !a->completed[1],
+                         "...and Play randomised catches it:");
+    st_run(a, array_example_solution(1));
+    play_random(a);
+    for (int s = 0; s < 2000 && a->cplaying; s++) code_step(a);
+    failures += st_check(a->completed[1], "a real answer completes the level:");
+    unsigned before = a->variant.seed;
+    play_random(a);
+    failures += st_check(a->variant.seed != before,
+                         "every press gives a new random bomb:");
+    exit_random(a);
+    set_level(a, LEVEL_CUBE);
 
     challenge_start(a);
     challenge_tick(a, CUBE_TIME_LIMIT - 1.0f, true);

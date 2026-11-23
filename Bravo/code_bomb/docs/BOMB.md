@@ -37,6 +37,41 @@ fail (for example Sumin's fault-repair sweep does not solve Invert).
 - Each module keeps its own code. Solved modules stay solved and their light
   turns green. When all five are green the display shows DEFUSED.
 
+### Random bombs
+
+Every bomb follows a rule ("every FAULT becomes SAFE", "copy the left half
+onto the right half"). `src/bomb_variants.c` makes new bombs with the same
+rule but different cards and a different size (`N`, or `ROWS` and `COLS`),
+leaning on edge cases: all FAULT, nothing to fix, odd sizes for Mirror.
+
+- **Run** always plays the bomb on screen, so it can be solved first.
+- **Play randomised (F9)** compiles the code, makes a new random bomb,
+  records the run and only then shows the bomb and plays it, so the code
+  can't be changed to fit it. Every press gives a different bomb.
+- The bomb panel shows "This bomb: done / not yet" and how many random
+  bombs were defused. A practice level is complete (green dot) only after
+  the bomb on screen and at least one random bomb are defused.
+- The "You can use" line names the sizes as constants with the current
+  value: `N (8 here)`. On a random bomb it shows that bomb's size.
+- Editing the code or pressing Run returns to the bomb on screen.
+- Level 3's right-to-left rule is checked by Sumin's engine only for her
+  own level, so random copies get the same check, with the same message,
+  through `array_apply()` in `array_bridge.c`.
+
+`tests/test_variants.c` checks every kind: 300 random bombs fit the engine
+and change size, the working answer defuses all of them, and code that
+sets the shown bomb's cards one by one defuses the shown bomb but fails
+within 10 random bombs. (Level 1 is the exception: `cards[2] = 0;` is the
+rule itself.)
+
+### Hints
+
+The **Hint** button on the MISSION line opens a card with three hints per
+bomb, revealed one at a time, from a gentle nudge to almost the answer.
+The card opens below the mission so both can be read. The Mirror mission
+was rewritten with the pairing spelled out and an example:
+"1 1 0 | 0 0 1 becomes 1 1 0 | 0 1 1".
+
 ### The timed challenge
 
 Levels 1-6 are untimed practice. The Cube bomb is the challenge:
@@ -48,7 +83,10 @@ Levels 1-6 are untimed practice. The Cube bomb is the challenge:
    in the panel's corner). Under 30 seconds the display blinks.
 3. **Boom:** any run that ends in a strike, or ends with its module
    unsolved, sets the bomb off after a short pause on the strike, and so
-   does the clock reaching 00:00. Compile errors never do: nothing ran.
+   does the clock reaching 00:00. A module that is solved on screen also
+   has to defuse 4 hidden random bombs; if it fails one, the bomb explodes
+   and the card names the random bomb's size. Compile errors never explode,
+   and Play randomised is safe practice.
 4. **Restart:** when the explosion has played, a card shows why it exploded
    and a **RESTART** button. Restart re-arms all five modules and starts the
    clock again. The player's code is kept.
@@ -100,8 +138,12 @@ text, which keeps the other faces uncluttered.
 
 ### Checking it
 
-- `make test`: 237 checks, including all cube modules.
-- `./build/codebomb --selftest`: checks the challenge rules above, then
+- `make test`: 326 checks, including all cube modules.
+- `./build/codebomb --selftest`: checks the challenge rules above
+  (including card-by-card code exploding on hidden random bombs, and a
+  failed Play randomised being safe), the practice rules (the shown bomb
+  alone doesn't complete a level, Play randomised catches card-by-card
+  code, each press gives a new bomb), then
   turns the cube to each module and checks that clicking the centre of the
   face picks that module.
 - `--shot boom.png arrays code 7 0 40` (explosion), `... 0 42` (restart
@@ -146,6 +188,39 @@ Bomb 화면의 왼쪽 패널은 3D 장면입니다: 나무 탁자 위의 폭탄.
 - 모듈마다 코드가 따로 저장됩니다. 푼 모듈은 풀린 채로 남고 불빛이 초록색이
   됩니다. 다섯 개가 모두 초록색이면 표시창에 DEFUSED가 나옵니다.
 
+### 무작위 폭탄
+
+모든 폭탄에는 규칙이 있습니다 ("모든 FAULT를 SAFE로", "왼쪽 절반을 오른쪽에
+복사"). `src/bomb_variants.c`는 같은 규칙에 카드와 크기(`N`, 또는 `ROWS`와
+`COLS`)가 다른 새 폭탄을 만들며, 경계 상황을 자주 만듭니다: 모두 FAULT,
+고칠 것 없음, Mirror의 홀수 크기.
+
+- **Run**은 항상 화면의 폭탄을 재생하므로 먼저 그것을 풀 수 있습니다.
+- **Play randomised (F9)**는 코드를 컴파일하고, 새 무작위 폭탄을 만들고,
+  실행을 기록한 뒤에야 폭탄을 보여 주고 재생하므로, 코드를 폭탄에 맞춰 바꿀
+  수 없습니다. 누를 때마다 다른 폭탄이 나옵니다.
+- 폭탄 패널에 "This bomb: done / not yet"과 해체한 무작위 폭탄 수가
+  표시됩니다. 연습 레벨은 화면의 폭탄과 무작위 폭탄을 하나 이상 해체해야
+  완료됩니다 (초록 점).
+- "You can use" 줄은 크기를 현재 값과 함께 상수로 보여 줍니다: `N (8 here)`.
+  무작위 폭탄에서는 그 폭탄의 크기를 보여 줍니다.
+- 코드를 고치거나 Run을 누르면 화면의 폭탄으로 돌아갑니다.
+- 수민의 엔진은 레벨 3의 오른쪽에서 왼쪽 규칙을 자신의 레벨에만 검사하므로,
+  무작위 복사본은 `array_bridge.c`의 `array_apply()`로 같은 메시지의 같은
+  검사를 받습니다.
+
+`tests/test_variants.c`는 모든 종류를 검사합니다: 무작위 폭탄 300개가 엔진에
+맞고 크기가 바뀌며, 정답은 모두 해체하고, 화면 폭탄의 카드를 하나씩 바꾸는
+코드는 화면 폭탄은 해체하지만 무작위 폭탄 10개 안에 실패합니다. (레벨 1은
+예외: `cards[2] = 0;`이 바로 규칙입니다.)
+
+### 힌트
+
+MISSION 줄의 **Hint** 버튼은 폭탄마다 힌트 세 개가 있는 카드를 엽니다.
+가벼운 힌트부터 거의 정답까지 하나씩 보여 줍니다. 카드는 미션 아래에 열려
+둘 다 읽을 수 있습니다. Mirror 미션은 짝을 맞추는 방법과 예를 넣어 다시
+썼습니다: "1 1 0 | 0 0 1 becomes 1 1 0 | 0 1 1".
+
 ### 시간 제한 도전
 
 레벨 1-6은 시간 제한 없는 연습입니다. 큐브 폭탄은 도전입니다:
@@ -156,7 +231,9 @@ Bomb 화면의 왼쪽 패널은 3D 장면입니다: 나무 탁자 위의 폭탄.
    카운트다운이 진행됩니다. 30초 미만이면 표시창이 깜박입니다.
 3. **폭발:** 스트라이크로 끝나거나 모듈을 풀지 못한 채 끝난 실행은 스트라이크를
    잠깐 보여 준 뒤 폭탄을 터뜨립니다. 시계가 00:00에 닿아도 터집니다.
-   컴파일 오류는 아무것도 실행되지 않았으므로 터지지 않습니다.
+   화면에서 풀린 모듈은 숨은 무작위 폭탄 4개도 해체해야 하며, 하나라도
+   실패하면 폭탄이 터지고 카드에 그 무작위 폭탄의 크기가 나옵니다. 컴파일
+   오류는 터지지 않고, Play randomised는 안전한 연습입니다.
 4. **재시작:** 폭발이 끝나면 터진 이유와 **RESTART** 버튼이 있는 카드가
    나옵니다. 재시작하면 다섯 모듈이 다시 무장되고 시계가 다시 갑니다.
    플레이어의 코드는 그대로 남습니다.
@@ -203,8 +280,11 @@ Predict, Explore, Find the bug을 숨기고, Cube bomb 버튼은 어느 모드�
 
 ### 확인 방법
 
-- `make test`: 큐브 모듈을 포함한 237개 검사.
-- `./build/codebomb --selftest`: 위의 도전 규칙을 검사한 뒤, 큐브를 모듈마다
+- `make test`: 큐브 모듈을 포함한 326개 검사.
+- `./build/codebomb --selftest`: 위의 도전 규칙 (숨은 무작위 폭탄에서 카드별
+  코드가 터지는 것, 실패한 Play randomised가 안전한 것 포함)과 연습 규칙
+  (화면 폭탄만으로는 완료 안 됨, Play randomised가 카드별 코드를 잡아냄,
+  누를 때마다 새 폭탄)을 검사한 뒤, 큐브를 모듈마다
   돌리고 면 중심을 클릭하면 그 모듈이 골라지는지 확인합니다.
 - `--shot boom.png arrays code 7 0 40` (폭발), `... 0 42` (재시작 카드),
   `... 0 43` (마지막 24초), `... 0 0` (START 카드).
