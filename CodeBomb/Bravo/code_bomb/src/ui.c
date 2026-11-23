@@ -4,6 +4,8 @@
  */
 #include "ui.h"
 
+#include "rlgl.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -28,6 +30,9 @@ const Color UI_HOVER     = { 103, 77, 143, 255 };
 /* ---- virtual mouse / 가상 마우스 ---------------------------------------- */
 
 static float g_scale = 1.0f, g_ox = 0.0f, g_oy = 0.0f;
+static bool  g_blocked;      /* a pop-up owns the mouse / 팝업이 마우스 사용 */
+
+void ui_block_input(bool blocked) { g_blocked = blocked; }
 
 void ui_set_transform(float scale, float offset_x, float offset_y)
 {
@@ -40,6 +45,7 @@ Vector2 ui_mouse(void)
 {
     /* Same transform as the drawing, reversed (Sumin's approach).
      * 그리기와 같은 변환을 거꾸로 적용한다 (수민의 방식). */
+    if (g_blocked) return (Vector2){ -10000.0f, -10000.0f };
     Vector2 raw = GetMousePosition();
     return (Vector2){ (raw.x - g_ox) / g_scale, (raw.y - g_oy) / g_scale };
 }
@@ -48,6 +54,15 @@ bool ui_clicked(Rectangle r)
 {
     return IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
            CheckCollisionPointRec(ui_mouse(), r);
+}
+
+void ui_draw_view(Texture2D tex, Rectangle src, Rectangle dst)
+{
+    rlDrawRenderBatchActive();
+    rlDisableColorBlend();
+    DrawTexturePro(tex, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
+    rlDrawRenderBatchActive();
+    rlEnableColorBlend();
 }
 
 /* ---- text / 텍스트 ------------------------------------------------------ */

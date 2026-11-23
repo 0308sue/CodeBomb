@@ -30,10 +30,13 @@
  *          --shot b4.png arrays code 4 14 0    (bomb 4, 14 steps)
  *          --shot cube.png arrays code 7 6 22  (cube, 2 modules solved)
  *          --shot mail.png mailroom - 1 9 0
- *   codebomb --selftest      cube click picking + all 40 lessons
- *                            큐브 클릭 선택 + 40개 수업 전부 검사
+ *          --shot h6.png help - 6 1        (field manual 6, page 2)
+ *   codebomb --selftest      cube click picking, all 40 lessons and every
+ *                            page of the field manual
+ *                            큐브 클릭 선택, 40개 수업, 매뉴얼 모든 페이지
  */
 #include "editor_ui.h"
+#include "help.h"
 #include "screen_arrays.h"
 #include "screen_mailroom.h"
 #include "screen_missions.h"
@@ -56,6 +59,9 @@ typedef struct {
     ScreenId        screen;
     MailroomScreen *mailroom;
     ArraysScreen   *arrays;
+    bool            quitting;    /* "Quit Code Bomb?" is showing
+                                    종료 확인 창이 떠 있음 */
+    bool            quit;
 } Game;
 
 static void leave_screen(Game *g)
@@ -65,24 +71,64 @@ static void leave_screen(Game *g)
     if (g->screen == SCREEN_LESSON) soo_lessons_leave();
 }
 
+/* Opening a screen for the first time also opens its field manual.
+ * 화면을 처음 열면 그 화면의 현장 매뉴얼도 열린다. */
 static void go(Game *g, ScreenId to)
 {
     if (g->screen != to) leave_screen(g);
     g->screen = to;
+    if (to == SCREEN_BOMB) help_open_once(HELP_BOMB);
+    if (to == SCREEN_MAILROOM) help_open_once(HELP_MAILROOM);
+    if (to == SCREEN_LESSON)
+        help_open_once(help_topic_for_level(soo_lessons_level()));
 }
 
-/* Tabs in the top-right. Missions also returns from a lesson to the map.
- * 오른쪽 위 탭. Missions는 수업에서 지도로 돌아가는 역할도 한다. */
+/* Tabs in the top-right, the Exit button, and the screen's Help button.
+ * Missions also returns from a lesson to the map.
+ * 오른쪽 위 탭, Exit 버튼, 화면의 Help 버튼. Missions는 수업에서 지도로
+ * 돌아가는 역할도 한다. */
 static void draw_tabs(Game *g)
 {
     static const char *const names[3] = { "Missions", "Bomb", "Mailroom" };
     static const ScreenId targets[3] = { SCREEN_MAP, SCREEN_BOMB, SCREEN_MAILROOM };
     for (int n = 0; n < 3; n++) {
-        Rectangle r = { 1312 + n * 192, 30, 180, 52 };
+        Rectangle r = { 1134 + n * 192, 30, 180, 52 };
         bool selected = g->screen == targets[n] ||
                         (n == 0 && g->screen == SCREEN_LESSON);
         if (ui_button(r, names[n], true, selected)) go(g, targets[n]);
     }
+    if (ui_button((Rectangle){ 1134 + 3 * 192, 30, 180, 52 }, "Exit", true,
+                  false))
+        g->quitting = true;
+
+    Rectangle help = { 972, 30, 150, 52 };
+    if (g->screen == SCREEN_BOMB) help_button(help, HELP_BOMB);
+    if (g->screen == SCREEN_MAILROOM) help_button(help, HELP_MAILROOM);
+    if (g->screen == SCREEN_LESSON)
+        help_button(help, help_topic_for_level(soo_lessons_level()));
+}
+
+/* "Quit Code Bomb?" pop-up. Enter quits, Esc cancels.
+ * "Quit Code Bomb?" 팝업. Enter는 종료, Esc는 취소. */
+static void draw_quit(Game *g)
+{
+    DrawRectangle(0, 0, UI_W, UI_H, (Color){ 8, 5, 18, 190 });
+    Rectangle card = { UI_W / 2 - 340, UI_H / 2 - 150, 680, 300 };
+    DrawRectangleRounded(card, 0.1f, 8, UI_PANEL);
+    DrawRectangleRoundedLinesEx(card, 0.1f, 8, 3.0f, UI_ACCENT);
+    const char *t = "Quit Code Bomb?";
+    DrawText(t, UI_W / 2 - MeasureText(t, FS_TITLE) / 2, (int)card.y + 46,
+             FS_TITLE, UI_INK);
+    const char *s = "Progress in this session is not saved.";
+    DrawText(s, UI_W / 2 - MeasureText(s, FS_SMALL) / 2, (int)card.y + 110,
+             FS_SMALL, UI_MUTED);
+    if (ui_button((Rectangle){ card.x + 70, card.y + 190, 250, 64 }, "Quit",
+                  true, true))
+        g->quit = true;
+    if (ui_button((Rectangle){ card.x + card.width - 320, card.y + 190, 250,
+                               64 },
+                  "Cancel", true, false))
+        g->quitting = false;
 }
 
 /* Optional monospace font in assets/, otherwise raylib's pixel font.
@@ -134,10 +180,36 @@ static int arg_int(int argc, char **argv, int i, int fallback)
 
 /* --selftest: cube picking, then every lesson opened, answered and drawn.
  * --selftest: 큐브 선택 검사 후 모든 수업을 열고 답하고 그린다. */
+/* One frame of the Bomb screen as the main loop runs it while a pop-up is
+ * open: only the clock ticks, then the 3D view is drawn.
+ * 팝업이 열려 있을 때 메인 루프가 실행하는 Bomb 화면 한 프레임: 시계만 가고
+ * 3D 화면을 그린다. */
+static void bomb_frame_under_popup(Game *g)
+{
+    arrays_tick(g->arrays, 1.0f / 60.0f);
+    arrays_render_view(g->arrays);
+}
+
 static int self_test(Game *g, RenderTexture2D canvas)
 {
-    puts("Cube bomb click picking:");
-    int failures = arrays_self_test(g->arrays);
+    /* Regression: the first click on the Bomb tab opens its Help page
+     * before the Bomb screen has ever updated.
+     * 회귀 검사: Bomb 탭을 처음 누르면 Bomb 화면이 한 번도 업데이트되기 전에
+     * 도움말이 열린다. */
+    puts("First visit to the Bomb screen with Help open:");
+    go(g, SCREEN_BOMB);
+    int failures = help_active() ? 0 : 1;
+    for (int f = 0; f < 3; f++) bomb_frame_under_popup(g);
+    puts("  drawn without crashing ok");
+    puts("First visit to the Mailroom with Help open:");
+    go(g, SCREEN_MAILROOM);
+    if (!help_active()) failures++;
+    for (int f = 0; f < 3; f++) mailroom_render_view(g->mailroom);
+    puts("  drawn without crashing ok");
+    leave_screen(g);
+    g->screen = SCREEN_MAP;
+
+    failures += arrays_self_test(g->arrays);
     puts("Sumin's lessons (open, answer, play to the end, draw):");
     int lessons = 0;
     for (int level = 1; level <= 40; level++) {
@@ -155,6 +227,20 @@ static int self_test(Game *g, RenderTexture2D canvas)
     }
     printf("  %d lessons drawn\n", lessons);
     if (lessons != 40) failures++;
+    puts("Field manual (every page of every topic):");
+    int pages = 0;
+    for (int t = 0; t < HELP_TOPIC_COUNT; t++) {
+        help_open((HelpTopic)t);
+        for (int p = 0; p < help_page_count((HelpTopic)t); p++) {
+            help_set_page(p);
+            BeginTextureMode(canvas);
+            help_draw();
+            EndTextureMode();
+            pages++;
+        }
+        if (help_page_count((HelpTopic)t) < 2) failures++;
+    }
+    printf("  %d pages drawn\n", pages);
     return failures;
 }
 
@@ -208,6 +294,13 @@ int main(int argc, char **argv)
         int variant = arg_int(argc, argv, 7, 0);
         if (strcmp(screen, "map") == 0) {
             g.screen = SCREEN_MAP;
+        } else if (strcmp(screen, "help") == 0) {
+            g.screen = SCREEN_MAP;
+            help_open((HelpTopic)(level - 1));
+            help_set_page(steps);
+        } else if (strcmp(screen, "quit") == 0) {
+            g.screen = SCREEN_MAP;
+            g.quitting = true;
         } else if (strcmp(screen, "lesson") == 0) {
             g.screen = SCREEN_LESSON;
             soo_lessons_qa(level);
@@ -243,17 +336,31 @@ int main(int argc, char **argv)
 
         float dt = GetFrameTime();
         if (dt > 0.1f) dt = 0.1f;
-        switch (g.screen) {
-        case SCREEN_MAILROOM: mailroom_update(g.mailroom, dt); break;
-        case SCREEN_BOMB:     arrays_update(g.arrays, dt); break;
-        case SCREEN_LESSON:   soo_lessons_update(dt); break;
-        default:              break;
+        /* A pop-up takes the keyboard; the screen underneath only keeps
+         * its clock. / 팝업이 키보드를 가져가고, 아래 화면은 시계만 간다. */
+        bool popup = help_active() || g.quitting;
+        if (help_active()) {
+            help_update();
+        } else if (g.quitting) {
+            if (IsKeyPressed(KEY_ESCAPE)) g.quitting = false;
+            if (IsKeyPressed(KEY_ENTER)) g.quit = true;
+            while (GetCharPressed() > 0) {
+            }
+        } else {
+            switch (g.screen) {
+            case SCREEN_MAILROOM: mailroom_update(g.mailroom, dt); break;
+            case SCREEN_BOMB:     arrays_update(g.arrays, dt); break;
+            case SCREEN_LESSON:   soo_lessons_update(dt); break;
+            default:              break;
+            }
         }
+        if (popup && g.screen == SCREEN_BOMB) arrays_tick(g.arrays, dt);
 
         if (g.screen == SCREEN_MAILROOM) mailroom_render_view(g.mailroom);
         if (g.screen == SCREEN_BOMB) arrays_render_view(g.arrays);
 
         BeginTextureMode(canvas);
+        ui_block_input(popup);
         switch (g.screen) {
         case SCREEN_MAILROOM:
             mailroom_draw(g.mailroom);
@@ -283,13 +390,16 @@ int main(int argc, char **argv)
         }
         }
         draw_tabs(&g);
+        ui_block_input(false);
+        if (help_active()) help_draw();
+        else if (g.quitting) draw_quit(&g);
         EndTextureMode();
+        if (g.quit) break;
 
         BeginDrawing();
         ClearBackground(UI_LETTERBOX);
-        DrawTexturePro(canvas.texture, (Rectangle){ 0, 0, UI_W, -UI_H },
-                       (Rectangle){ ox, oy, UI_W * scale, UI_H * scale },
-                       (Vector2){ 0, 0 }, 0.0f, WHITE);
+        ui_draw_view(canvas.texture, (Rectangle){ 0, 0, UI_W, -UI_H },
+                     (Rectangle){ ox, oy, UI_W * scale, UI_H * scale });
         EndDrawing();
 
         if (shot && ++frames == 3) {

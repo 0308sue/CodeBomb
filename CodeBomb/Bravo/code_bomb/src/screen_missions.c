@@ -9,17 +9,12 @@
  */
 #include "screen_missions.h"
 
+#include "help.h"
 #include "roadmap_SOO.h"
 #include "ui.h"
 
 #include <stdio.h>
 
-/* Chapter colours from her DrawRoadmap() / 수민의 DrawRoadmap() 챕터 색 */
-static const Color CHAPTER_COLORS[8] = {
-    { 255, 187, 220, 255 }, { 173, 231, 211, 255 }, { 255, 209, 164, 255 },
-    { 187, 196, 255, 255 }, { 167, 223, 250, 255 }, { 231, 193, 255, 255 },
-    { 254, 222, 151, 255 }, { 255, 175, 182, 255 }
-};
 
 #define CHAPTERS ((int)(sizeof SOO_CHAPTERS / sizeof SOO_CHAPTERS[0]))
 
@@ -48,7 +43,7 @@ MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS])
             total++;
             if (SOO_ROUTES[l]) ready++;
         }
-    DrawText("Learn with Sumin's lessons, then defuse bombs with real C.", 45,
+    DrawText("Learn from these lessons, then defuse bombs with real C.", 45,
              126, FS_SMALL, UI_INK);
     ui_text_right(TextFormat("%d lessons  /  %d ready to play", total, ready),
                   1875, 126, FS_SMALL, UI_MUTED);
@@ -58,7 +53,7 @@ MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS])
         const SooChapter *ch = &SOO_CHAPTERS[n];
         float x = 30 + (n % 2) * 945.0f, y = 170 + (n / 2) * 196.0f;
         Rectangle card = { x, y, 915, 180 };
-        Color tint = CHAPTER_COLORS[n % 8];
+        Color tint = help_chapter_color(n);
         DrawRectangleRounded((Rectangle){ x, y + 6, 915, 180 }, 0.16f, 10,
                              (Color){ 22, 17, 39, 255 });
         DrawRectangleRounded(card, 0.16f, 10, UI_PANEL);
@@ -69,6 +64,10 @@ MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS])
                  FS_BODY, UI_BG);
         DrawText(ch->title, (int)x + 90, (int)y + 26, FS_BODY, UI_INK);
         DrawText(ch->difficulty, (int)x + 90, (int)y + 64, FS_SMALL, tint);
+        /* the chapter's field manual / 챕터의 현장 매뉴얼 */
+        if (n <= HELP_CHAPTER_8)
+            help_button((Rectangle){ x + 915 - 150, y + 22, 128, 48 },
+                        (HelpTopic)n);
         for (int l = ch->first; l <= ch->last; l++) {
             Rectangle r = { x + 90 + (l - ch->first) * 128.0f, y + 106, 114, 56 };
             char label[8];
@@ -100,6 +99,6 @@ MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS])
         if (bomb_done[b])
             DrawCircle((int)(r.x + r.width - 14), (int)(r.y + 14), 5, UI_SUCCESS);
     }
-    ui_text_right("Bright numbers open a lesson", 1863, 978, FS_SMALL, UI_MUTED);
+    help_button((Rectangle){ 1890 - 27 - 128, 974, 128, 48 }, HELP_BOMB);
     return pick;
 }

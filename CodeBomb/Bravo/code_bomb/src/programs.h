@@ -20,6 +20,8 @@ typedef struct {
     const char *source;      /* C source / C 소스 */
     int         statements;  /* expected size score / 기대 크기 점수 */
     void (*build)(Program *p);
+    const char *about;       /* one line for the Examples menu
+                                Examples 메뉴에 보일 한 줄 설명 */
 } DemoProgram;
 
 int                demo_count(void);

@@ -82,6 +82,9 @@ playable. Her screens are hosted without copying or editing them:
   `soo_lessons.c`.
 - `stage6_SOO.c`, `stage7_SOO.c` and `stage8_SOO.c` are compiled from her
   folder.
+- Each chapter card has a **Help** button that opens a short field manual
+  for that chapter (`src/help.c`). It also opens by itself before the first
+  lesson of a chapter. The chapter titles and colours come from her roadmap.
 
 Suggestion for Sumin: if her shared helpers (`Workshop`, `Button`,
 `Wrapped`, colours) move from `main_SOO.c` into a header, the adapter can
@@ -201,6 +204,9 @@ green. See `docs/BOMB.md`.
   단계는 `soo_lessons.c`의 각 switch에 한 줄씩 추가하면 됩니다.
 - `stage6_SOO.c`, `stage7_SOO.c`, `stage8_SOO.c`는 수민의 폴더에서 바로
   컴파일합니다.
+- 챕터 카드마다 그 챕터의 짧은 현장 매뉴얼을 여는 **Help** 버튼이 있습니다
+  (`src/help.c`). 챕터의 첫 수업 전에도 저절로 열립니다. 챕터 제목과 색은
+  수민의 로드맵에서 가져옵니다.
 
 수민에게 제안: 공용 도우미(`Workshop`, `Button`, `Wrapped`, 색상)를
 `main_SOO.c`에서 헤더로 옮기면, 어댑터가 파일 전체 대신 그 헤더를 포함할 수

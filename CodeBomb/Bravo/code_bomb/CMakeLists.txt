@@ -56,7 +56,7 @@ endif()
 add_executable(codebomb
     src/main.c src/ui.c src/editor_ui.c src/scene_mailroom.c
     src/screen_mailroom.c src/screen_arrays.c src/screen_missions.c
-    src/soo_lessons.c src/bomb3d.c
+    src/soo_lessons.c src/help.c src/bomb3d.c
     ${SOO_DIR}/pointer_SOO.c ${SOO_DIR}/stage6_SOO.c ${SOO_DIR}/stage7_SOO.c
     ${SOO_DIR}/stage8_SOO.c)
 target_link_libraries(codebomb PRIVATE cb_core raylib)

@@ -46,7 +46,21 @@ void    ui_set_transform(float scale, float offset_x, float offset_y);
 Vector2 ui_mouse(void);
 bool    ui_clicked(Rectangle r);
 
+/* While a pop-up (help, quit) is open, the screen underneath is drawn with
+ * the mouse moved far away, so none of its buttons react.
+ * 팝업(도움말, 종료)이 열려 있는 동안 아래 화면은 마우스를 멀리 둔 채
+ * 그려서 버튼이 반응하지 않는다. */
+void    ui_block_input(bool blocked);
+
 /* ---- drawing / 그리기 --------------------------------------------------- */
+
+/* Copy a render texture as it is, without blending. Its colours are final;
+ * translucent effects drawn into it (flashes, smoke) lower its alpha, and
+ * normal blending would let the background show through.
+ * 렌더 텍스처를 섞지 않고 그대로 복사한다. 색은 이미 완성되어 있다. 안에
+ * 그린 반투명 효과(섬광, 연기)가 알파를 낮추므로 보통 섞기를 하면 뒤 배경이
+ * 비친다. */
+void ui_draw_view(Texture2D tex, Rectangle src, Rectangle dst);
 void ui_background(void);
 void ui_panel(Rectangle r);
 void ui_mascot(float x, float y);

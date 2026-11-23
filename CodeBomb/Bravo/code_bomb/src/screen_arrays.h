@@ -52,6 +52,10 @@ void arrays_open(ArraysScreen *s, int level, bool find_the_bug);
 /* Which bombs are defused (7 entries). / 해체한 폭탄 (7개). */
 void arrays_defused(const ArraysScreen *s, bool out[7]);
 
+/* Keeps the Cube bomb's clock running while a pop-up covers the screen.
+ * 팝업이 화면을 덮는 동안에도 큐브 폭탄의 시계가 계속 간다. */
+void arrays_tick(ArraysScreen *s, float dt);
+
 /* Called when another screen is opened. / 다른 화면을 열 때 호출. */
 void arrays_leave(ArraysScreen *s);
 

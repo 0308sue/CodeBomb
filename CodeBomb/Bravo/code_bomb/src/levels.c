@@ -195,6 +195,7 @@ const LevelDef LEVEL_MAILROOM = {
              "the same order, to the OUTBOX belt. take() picks up the next "
              "parcel and gives back its number; put(n) places a parcel "
              "stamped n on the outbox. Every statement ends with ;",
+    .goal = "Deliver every parcel from the INBOX to the OUTBOX, in order.",
     .tools = "int take(void);   void put(int n);",
     .starter = "// Deliver every parcel from the INBOX to the OUTBOX.\n"
                "void run(void) {\n"

@@ -56,7 +56,9 @@ typedef struct LevelDef {
     int         number;
     const char *title;
     const char *concept;
-    const char *brief;
+    const char *brief;          /* full explanation (Help screen)
+                                   전체 설명 (도움말 화면) */
+    const char *goal;           /* one line shown on screen / 화면의 한 줄 */
     const char *tools;          /* one-line list of available functions
                                    사용 가능한 함수 목록 (한 줄) */
     const char *starter;        /* code shown when the level opens
