@@ -1,0 +1,10 @@
+# Build output / 빌드 결과물
+build/
+build-cmake/
+.vs/
+.vscode/
+*.exe
+*.o
+*.d
+*.dSYM/
+.DS_Store
