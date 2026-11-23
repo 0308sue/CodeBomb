@@ -23,6 +23,7 @@
 #include "ui.h"
 #include "vm.h"
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +45,10 @@ static const char *const SPEED_NAMES[] = { "1x", "2x", "4x", "Fast" };
 #define SPEED_COUNT 4
 
 typedef enum { RUN_IDLE, RUN_GO, RUN_STEP_LINE, RUN_STEP_OP } RunMode;
+
+/* Three stars per level: solved, size par met, speed par met.
+ * 레벨마다 별 세 개: 해결, 크기 기준 달성, 속도 기준 달성. */
+enum { STAR_SOLVED = 1, STAR_SIZE = 2, STAR_SPEED = 4 };
 
 struct MailroomScreen {
     const LevelDef    *level;
@@ -77,6 +82,8 @@ struct MailroomScreen {
     int                slot;             /* LEVEL_LIST index / 레벨 칸 */
     char              *code[LEVEL_SLOTS];/* saved code per level / 레벨별 코드 */
     bool               passed[LEVEL_SLOTS];
+    int                stars[LEVEL_SLOTS];  /* STAR_* bits, best so far
+                                               지금까지 얻은 STAR_* 비트 */
     bool               machine_view;     /* inspector: Simple or Machine
                                             인스펙터: Simple 또는 Machine */
 };
@@ -186,6 +193,9 @@ static void submit(MailroomScreen *a)
                     r.avg_steps, a->level->par_speed,
                     r.avg_steps <= a->level->par_speed ? "MET" : "missed");
         a->passed[a->slot] = true;
+        a->stars[a->slot] |= STAR_SOLVED;
+        if (size <= a->level->par_size) a->stars[a->slot] |= STAR_SIZE;
+        if (r.avg_steps <= a->level->par_speed) a->stars[a->slot] |= STAR_SPEED;
     } else {
         set_message(a, UI_ERROR, "%s", r.message);
     }
@@ -362,9 +372,9 @@ void mailroom_destroy(MailroomScreen *a)
 bool mailroom_typing(const MailroomScreen *a) { return a->ed->focused; }
 
 static const int HELP_FOR_SLOT[LEVEL_SLOTS] = {
-    HELP_MAILROOM, HELP_NIGHT_SHIFT, HELP_MAILROOM, HELP_WEIGH_STATION,
-    HELP_MAILROOM, HELP_HEAD_COUNT, HELP_BIGGEST_BOX, HELP_MAILROOM,
-    HELP_COUNTDOWN, HELP_MAILROOM, HELP_MAILROOM
+    HELP_MAILROOM, HELP_NIGHT_SHIFT, HELP_DAMAGED_GOODS, HELP_WEIGH_STATION,
+    HELP_TWO_BELTS, HELP_HEAD_COUNT, HELP_BIGGEST_BOX, HELP_STAMP_PRESS,
+    HELP_COUNTDOWN, HELP_BACK_SHELF, HELP_HOLIDAY_RUSH
 };
 
 int mailroom_help_topic(const MailroomScreen *a) { return HELP_FOR_SLOT[a->slot]; }
@@ -430,6 +440,8 @@ void mailroom_update(MailroomScreen *a, float dt)
 
 void mailroom_render_view(MailroomScreen *a)
 {
+    if (a->scene.prerender)
+        a->scene.prerender(a->scene.state, (int)VIEW.width, (int)VIEW.height);
     BeginTextureMode(a->view);
     a->scene.draw(a->scene.state, (int)VIEW.width, (int)VIEW.height);
     EndTextureMode();
@@ -502,6 +514,29 @@ static void draw_parcels(const char *label, const int32_t *items, int n, int x,
     }
 }
 
+/* shelf[0..7]: index above, value inside (empty slots dimmed).
+ * shelf[0..7]: 위에 인덱스, 안에 값 (빈 칸은 흐리게). */
+static void draw_shelf_row(const MailroomScreen *a, int x, int y)
+{
+    DrawText("SHELF", x, y + 10, FS_SMALL, (Color){ 255, 200, 120, 255 });
+    for (int k = 0; k < LEVEL_SHELF_SIZE; k++) {
+        Rectangle r = { (float)(x + 120 + k * 48), (float)y, 42, 40 };
+        bool used = a->run.shelf_used[k];
+        DrawRectangleRounded(r, 0.25f, 6, used ? (Color){ 150, 104, 60, 255 }
+                                               : (Color){ 34, 27, 56, 255 });
+        DrawRectangleRoundedLinesEx(r, 0.25f, 6, 1.5f, UI_BORDER);
+        if (used) {
+            const char *t = TextFormat("%d", (int)a->run.shelf[k]);
+            DrawText(t, (int)(r.x + (r.width - MeasureText(t, FS_SMALL)) / 2),
+                     (int)r.y + 10, FS_SMALL, UI_INK);
+        } else {
+            const char *t = TextFormat("%d", k);
+            DrawText(t, (int)(r.x + (r.width - MeasureText(t, FS_SMALL)) / 2),
+                     (int)r.y + 10, FS_SMALL, UI_BORDER);
+        }
+    }
+}
+
 /* Simple view: parcels, program state and variables. Machine view adds the
  * operand stack and bytecode for Step op.
  * Simple 보기: 소포, 프로그램 상태, 변수. Machine 보기는 Step op를 위한
@@ -536,6 +571,15 @@ static void draw_inspector(MailroomScreen *a)
                      UI_SUCCESS);
         draw_parcels("GOAL", a->run.expected, a->run.expected_len, x, y + 124,
                      UI_MUTED);
+        /* fourth row: the shelf, or the second output
+           넷째 줄: 선반 또는 두 번째 출력 */
+        if (a->level->has_shelf) {
+            draw_shelf_row(a, x, y + 186);
+        } else if (a->level->side_name) {
+            draw_parcels(a->level->side_name[0] == 's' ? "SHRED" : "ODD",
+                         a->run.side, a->run.side_len, x, y + 186,
+                         (Color){ 255, 160, 110, 255 });
+        }
 
         x = (int)INSP.x + 560;
         y = (int)INSP.y + 22;
@@ -545,6 +589,12 @@ static void draw_inspector(MailroomScreen *a)
         y += lh;
         DrawText(TextFormat("Line    %d", vm_current_line(vm)), x, y, FS_SMALL,
                  UI_INK);
+        if (a->level->side_name && a->level->has_shelf) {
+            y += lh;
+            DrawText(TextFormat("Shredded %d of %d", a->run.side_len,
+                                a->run.side_expected_len),
+                     x, y, FS_SMALL, (Color){ 255, 160, 110, 255 });
+        }
         y += lh + 16;
         DrawText("VARIABLES", x, y, FS_SMALL, UI_ACCENT);
         draw_variables(a, x, y + 34, (int)(INSP.y + INSP.height) - 20);
@@ -660,24 +710,74 @@ static void draw_examples_menu(MailroomScreen *a, Rectangle anchor)
         a->examples_open = false;
 }
 
-/* One button per level; planned levels show only their number, dimmed.
- * 레벨마다 버튼 하나. 계획된 레벨은 번호만 흐리게 보인다. */
+static int star_count(int bits)
+{
+    return (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1);
+}
+
+/* A five-pointed star. / 꼭짓점 다섯 개의 별. */
+static void draw_star(float cx, float cy, float r, bool filled)
+{
+    Vector2 pts[11];
+    pts[0] = (Vector2){ cx, cy };
+    for (int k = 0; k < 10; k++) {
+        float ang = -PI / 2 - k * PI / 5;     /* clockwise on screen for the
+                                                 fan / 팬을 위해 화면상 시계 방향 */
+        float rr = (k % 2) ? r * 0.45f : r;
+        pts[k + 1] = (Vector2){ cx + cosf(ang) * rr, cy + sinf(ang) * rr };
+    }
+    if (filled) {
+        for (int k = 0; k < 10; k++) {
+            Vector2 b = pts[k + 1], c = pts[(k + 1) % 10 + 1];
+            DrawTriangle(pts[0], b, c, (Color){ 255, 205, 70, 255 });
+            DrawTriangle(pts[0], c, b, (Color){ 255, 205, 70, 255 });
+        }
+    }
+    for (int k = 0; k < 10; k++)
+        DrawLineEx(pts[k + 1], pts[(k + 1) % 10 + 1], 1.5f,
+                   filled ? (Color){ 255, 225, 140, 255 } : UI_MUTED);
+}
+
+/* One chip per level: its number and three stars; the open level also shows
+ * its name. The right end shows overall progress.
+ * 레벨마다 칩 하나: 번호와 별 세 개. 열린 레벨은 이름도 보인다. 오른쪽
+ * 끝에 전체 진행 상황을 보여 준다. */
 static void draw_level_row(MailroomScreen *a)
 {
     DrawText("LEVELS", 45, 128, FS_SMALL, UI_MUTED);
     float x = 150;
     for (int s = 0; s < LEVEL_SLOTS; ++s) {
         const LevelDef *l = LEVEL_LIST[s];
-        const char *label = l ? TextFormat("%d  %s", s + 1, l->title)
-                              : TextFormat("%d", s + 1);
-        float w = (float)MeasureText(label, FS_SMALL) + 36;
+        bool open = s == a->slot;
+        const char *label = (l && open) ? TextFormat("%d  %s", s + 1, l->title)
+                                        : TextFormat("%d", s + 1);
+        float tw = (float)MeasureText(label, FS_SMALL);
+        float w = tw + 30 + 3 * 18 + 8;
         Rectangle r = { x, 112, w, 52 };
-        if (ui_button(r, label, l != NULL, s == a->slot))
-            mailroom_select_level(a, s);
-        if (a->passed[s])
-            DrawCircle((int)(r.x + r.width - 12), (int)(r.y + 12), 5,
-                       UI_SUCCESS);
-        x += w + 10;
+        if (ui_button(r, "", l != NULL, open)) mailroom_select_level(a, s);
+        DrawText(label, (int)r.x + 15, (int)r.y + 16, FS_SMALL,
+                 l ? UI_INK : UI_MUTED);
+        static const int BITS[3] = { STAR_SOLVED, STAR_SIZE, STAR_SPEED };
+        for (int k = 0; k < 3; k++)
+            draw_star(r.x + 15 + tw + 20 + k * 18, r.y + 26, 8,
+                      (a->stars[s] & BITS[k]) != 0);
+        x += w + 8;
+    }
+    int solved = 0, stars = 0;
+    mailroom_progress(a, &solved, &stars);
+    const char *t = TextFormat("%d / %d solved   %d / %d", solved, LEVEL_SLOTS,
+                               stars, 3 * LEVEL_SLOTS);
+    int tw = MeasureText(t, FS_SMALL);
+    DrawText(t, 1890 - tw - 26, 128, FS_SMALL, UI_MUTED);
+    draw_star(1890 - 12, 138, 9, true);
+}
+
+void mailroom_progress(const MailroomScreen *a, int *solved, int *stars)
+{
+    *solved = *stars = 0;
+    for (int s = 0; s < LEVEL_SLOTS; ++s) {
+        *solved += a->passed[s];
+        *stars += star_count(a->stars[s]);
     }
 }
 
@@ -769,7 +869,7 @@ void mailroom_draw(MailroomScreen *a)
 /* Screenshots of the animation: load the level's answer and play it live
  * for `seconds` (at 1x) so a frame can be caught mid-action.
  * 애니메이션 스크린샷: 레벨 정답을 불러와 seconds초 동안 실제로 재생한다. */
-void mailroom_qa_play(MailroomScreen *a, float seconds)
+bool mailroom_qa_play(MailroomScreen *a, float seconds)
 {
     load_code(a, a->level->reference);
     watch_edits(a);
@@ -781,6 +881,17 @@ void mailroom_qa_play(MailroomScreen *a, float seconds)
         check_finished(a);
     }
     update_markers(a);
+    char why[160];
+    return a->vm->status == VM_HALTED &&
+           level_check_finished(&a->run, why, sizeof why);
+}
+
+bool mailroom_qa_submit(MailroomScreen *a)
+{
+    load_code(a, a->level->reference);
+    watch_edits(a);
+    submit(a);
+    return a->passed[a->slot];
 }
 
 void mailroom_qa(MailroomScreen *a, int demo, int steps)

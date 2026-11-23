@@ -34,10 +34,22 @@ bool mailroom_select_level(MailroomScreen *m, int slot);
 
 /* Screenshots: play the level's answer live for `seconds`.
  * 스크린샷: 레벨 정답을 seconds초 동안 실제로 재생한다. */
-void mailroom_qa_play(MailroomScreen *m, float seconds);
+/* Returns true when the answer finished with every parcel in place.
+ * 정답이 모든 소포를 제자리에 두고 끝나면 true. */
+bool mailroom_qa_play(MailroomScreen *m, float seconds);
 
 /* The field manual topic for the open level (a HelpTopic value).
  * 열린 레벨의 현장 매뉴얼 주제 (HelpTopic 값). */
 int  mailroom_help_topic(const MailroomScreen *m);
+
+/* Levels solved and stars earned (3 per level: solved, size, speed), for
+ * the level row and the mission map.
+ * 해결한 레벨 수와 얻은 별 (레벨마다 3개: 해결, 크기, 속도). 레벨 줄과
+ * 미션 지도에서 쓴다. */
+void mailroom_progress(const MailroomScreen *m, int *solved, int *stars);
+
+/* Screenshots and self-test: run Submit with the level's answer.
+ * 스크린샷과 자체 검사: 레벨 정답으로 Submit을 실행한다. */
+bool mailroom_qa_submit(MailroomScreen *m);
 
 #endif

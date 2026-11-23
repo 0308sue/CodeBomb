@@ -34,7 +34,8 @@ typedef enum {
     DIA_LIST, DIA_LIST_INSERT, DIA_HEAP, DIA_DANGLING, DIA_VECTOR,
     DIA_ITERATOR, DIA_CARDS_COST, DIA_STRIKE, DIA_CUBE_TIMER, DIA_MAILROOM,
     DIA_CALL, DIA_BELT_NIGHT, DIA_BELT_WEIGH, DIA_BELT_COUNT, DIA_BELT_MAX,
-    DIA_BELT_COUNTDOWN
+    DIA_BELT_COUNTDOWN, DIA_BELT_SHRED, DIA_BELT_TWO, DIA_PRESS, DIA_SHELF,
+    DIA_BELT_RUSH
 } Diagram;
 
 typedef struct {
@@ -588,6 +589,147 @@ static const HelpDoc DOCS[HELP_TOPIC_COUNT] = {
           "TRACE FOR n = 3", DIA_NONE,
           "Trace the first and the last pass on paper before you run." } },
       2, "9" },
+
+    /* ---- Mailroom 3: Damaged Goods ---- */
+    { "Damaged Goods", {
+        { "if and else",
+          "if runs a block only when its condition is true. else gives the "
+          "other choice: exactly one of the two blocks runs, never both.\n"
+          "Here the question is \"is this parcel damaged?\", which in C is "
+          "box < 0.",
+          "if (box < 0) {\n"
+          "    shred(box);   // damaged\n"
+          "} else {\n"
+          "    put(box);     // fine, deliver it\n"
+          "}",
+          NULL, DIA_BELT_SHRED,
+          "A block with one statement can drop the { }, but only that one "
+          "statement belongs to the if." },
+        { "Comparisons",
+          "A comparison gives 1 (true) or 0 (false): < less than, <= less or "
+          "equal, > greater, >= greater or equal, == equal, != not equal.\n"
+          "Read the rule carefully: \"below 0\" is < 0. A parcel stamped 0 is "
+          "not damaged, so <= would shred it by mistake.",
+          "int box = take();   // store it first\n"
+          "if (box < 0) ...    // then test the variable\n"
+          "\n"
+          "// if (take() < 0) takes a parcel just to test it!",
+          "TIP", DIA_NONE,
+          "Store take()'s answer in a variable when you need it twice." } },
+      2, "3" },
+
+    /* ---- Mailroom 5: Two Belts ---- */
+    { "Two Belts", {
+        { "The remainder: %",
+          "a % b is what is left over after dividing a by b. 17 % 5 is 2, "
+          "because 17 is 3 fives and 2 more.\n"
+          "% 2 tells even from odd: an even number leaves 0, an odd number "
+          "leaves 1.",
+          "10 % 2   // 0: even\n"
+          " 7 % 2   // 1: odd\n"
+          "17 % 5   // 2\n"
+          " 9 / 2   // 4: division drops the rest",
+          NULL, DIA_BELT_TWO,
+          "/ and % are partners: (a / b) * b + a % b is always a." },
+        { "== asks, = stores",
+          "box % 2 == 0 asks a question and gives 1 or 0. box = 0 stores 0 in "
+          "box, wiping the parcel's number.\n"
+          "Each parcel goes to exactly one belt, so if and else fit: one "
+          "condition, two outcomes.",
+          "if (box % 2 == 0) {\n"
+          "    put_even(box);\n"
+          "} else {\n"
+          "    put_odd(box);   // the remainder was 1\n"
+          "}",
+          NULL, DIA_NONE,
+          "Any whole number % 2 is 0 or 1 when the number is 0 or more." } },
+      2, "5" },
+
+    /* ---- Mailroom 8: Stamp Press ---- */
+    { "Stamp Press", {
+        { "Writing a function",
+          "A function is a named piece of code you can call again and again. "
+          "int press(int n) says: it is called press, it takes one int called "
+          "n, and it gives back an int.\n"
+          "return hands the answer back to whoever called it, and the "
+          "function stops there.",
+          "int press(int n) {\n"
+          "    return 3 * n + 1;\n"
+          "}\n"
+          "\n"
+          "int a = press(2);   // a is 7\n"
+          "int b = press(a);   // b is 22",
+          NULL, DIA_PRESS,
+          "Write the rule once. If it changes, you fix one place." },
+        { "Parameters are copies",
+          "When you call press(box), n gets a copy of box's value. Changing n "
+          "inside the function does not change box.\n"
+          "To use the answer, keep what the function returns: store it, pass "
+          "it to put(), or pass it to press() again.",
+          "void bad(int n) {\n"
+          "    n = 3 * n + 1;   // changes the copy only\n"
+          "}\n"
+          "\n"
+          "put(press(press(box)));   // inside first",
+          NULL, DIA_NONE,
+          "Calls inside calls run from the inside out." } },
+      2, "8" },
+
+    /* ---- Mailroom 10: Back Shelf ---- */
+    { "Back Shelf", {
+        { "Your first array",
+          "An array is a row of numbered slots of the same type. The shelf is "
+          "int shelf[8]: eight ints, shelf[0] to shelf[7]. The first index is "
+          "0, so the last is 7, not 8.\n"
+          "An index can be a variable: shelf[n] = take(); stores a parcel in "
+          "slot n.",
+          "shelf[0] = 14;      // first slot\n"
+          "shelf[n] = take();  // slot n\n"
+          "n++;                // next free slot\n"
+          "put(shelf[2]);      // read a slot",
+          NULL, DIA_SHELF,
+          "These are the same rules as the bomb's cards[i]." },
+        { "Walking backwards",
+          "After storing, n is the number of parcels, so the last one is in "
+          "shelf[n - 1]. Walk down from there to 0.\n"
+          "shelf[n] was never filled, and shelf[8] is past the end of the "
+          "shelf. In real C reading either gives garbage; here the robot "
+          "stops with an error.",
+          "for (int i = n - 1; i >= 0; i--) {\n"
+          "    // shelf[i] from last to first\n"
+          "}",
+          "SHAPE", DIA_NONE,
+          "Check the first and last index of every loop over an array." } },
+      2, "10" },
+
+    /* ---- Mailroom 11: Holiday Rush ---- */
+    { "Holiday Rush", {
+        { "Putting it together",
+          "This level uses everything: a loop over groups, a sentinel 0, if "
+          "and else for damaged parcels, a counter and the shelf.\n"
+          "Plan it in words first, then turn each line into C.",
+          "for each group:\n"
+          "    count = 0\n"
+          "    until the 0 arrives:\n"
+          "        damaged? shred it\n"
+          "        good? shelf[count], count + 1\n"
+          "    deliver shelf[count-1] ... shelf[0]",
+          "PLAN", DIA_BELT_RUSH,
+          "Shred a damaged parcel straight away; only good ones go on the "
+          "shelf." },
+        { "One piece at a time",
+          "Big programs are built in small steps. First make the group loop "
+          "work and only shred and count. Run it and watch the inspector.\n"
+          "Then add the shelf, then the delivery loop. If a run fails, the "
+          "message names the parcel and the line: read it before changing "
+          "code.",
+          "// step 1: shred, count good ones\n"
+          "// step 2: + store them on the shelf\n"
+          "// step 3: + deliver them backwards\n"
+          "// step 4: Submit",
+          "STEPS", DIA_NONE,
+          "Step (F6) runs one line at a time. Use it near the bug." } },
+      2, "11" },
 };
 
 /* Chapter colours (also used by the mission map). / 챕터 색 (미션 지도도 사용) */
@@ -776,6 +918,41 @@ static void draw_belt(Rectangle box, const int *in, int nin, const int *out,
     float ax = box.x + 100;
     arrow((Vector2){ ax, y1 + 64 }, (Vector2){ ax, y2 - 8 }, UI_ACCENT);
     DrawText(rule, (int)x0, (int)(y1 + y2) / 2 + 12, FS_SMALL, UI_ACCENT);
+}
+
+
+/* Belt with two outputs: the outbox and the shredder or the ODD belt.
+ * 출력이 둘인 벨트: 출력함과 파쇄기 또는 ODD 벨트. */
+static void draw_belt3(Rectangle box, const int *in, int nin, const int *out,
+                       int nout, const char *out_label, const int *side,
+                       int nside, const char *side_label, Color side_col,
+                       const char *rule, bool markers)
+{
+    const Color parcel = { 150, 104, 60, 255 };
+    const Color hurt = { 120, 50, 50, 255 };
+    float x0 = box.x + 200;
+    float ys[3] = { box.y + 24, box.y + 112, box.y + 200 };
+    DrawText("INBOX", (int)box.x + 36, (int)ys[0] + 18, FS_SMALL, D_LINE);
+    DrawText(out_label, (int)box.x + 36, (int)ys[1] + 18, FS_SMALL, UI_SUCCESS);
+    DrawText(side_label, (int)box.x + 36, (int)ys[2] + 18, FS_SMALL, side_col);
+    const int *rows[3] = { in, out, side };
+    int counts[3] = { nin, nout, nside };
+    for (int r = 0; r < 3; r++) {
+        float x = x0;
+        for (int k = 0; k < counts[r]; k++) {
+            int v = rows[r][k];
+            if (v == GAP) {
+                x += 22;
+                continue;
+            }
+            bool marker = markers && r == 0 && v == 0;
+            cell(x, ys[r], 56, 56, TextFormat("%d", v),
+                 marker ? D_EMPTY : v < 0 ? hurt : parcel, false);
+            x += 64;
+        }
+    }
+    ctext(rule, box.x + box.width / 2, box.y + box.height - 46, FS_SMALL,
+          UI_ACCENT);
 }
 
 static void draw_diagram(Diagram d, Rectangle box)
@@ -1163,6 +1340,70 @@ static void draw_diagram(Diagram d, Rectangle box)
         static const int in[2] = { 3, 2 };
         static const int out[5] = { 3, 2, 1, 2, 1 };
         draw_belt(box, in, 2, out, 5, "n becomes n, n-1, ... 1", false);
+        break;
+    }
+    case DIA_BELT_SHRED: {
+        static const int in[5] = { 12, -5, 30, -18, 0 };
+        static const int out[3] = { 12, 30, 0 };
+        static const int bad[2] = { -5, -18 };
+        draw_belt3(box, in, 5, out, 3, "OUTBOX", bad, 2, "SHRED",
+                   (Color){ 255, 120, 100, 255 },
+                   "below 0: shred(n)    0 and up: put(n)", false);
+        break;
+    }
+    case DIA_BELT_TWO: {
+        static const int in[5] = { 4, 7, 10, 3, 8 };
+        static const int even[3] = { 4, 10, 8 };
+        static const int odd[2] = { 7, 3 };
+        draw_belt3(box, in, 5, even, 3, "EVEN", odd, 2, "ODD",
+                   (Color){ 255, 200, 90, 255 },
+                   "n % 2 == 0: put_even(n)    otherwise: put_odd(n)", false);
+        break;
+    }
+    case DIA_BELT_RUSH: {
+        static const int in[8] = { 5, -3, 9, 0, 22, 4, -8, 0 };
+        static const int out[5] = { 9, 5, GAP, 4, 22 };
+        static const int bad[2] = { -3, -8 };
+        draw_belt3(box, in, 8, out, 5, "OUTBOX", bad, 2, "SHRED",
+                   (Color){ 255, 120, 100, 255 },
+                   "each group ends in 0: good ones go out last-first", true);
+        break;
+    }
+    case DIA_PRESS: {
+        /* 2 -> press -> 7 -> press -> 22 */
+        const Color parcel = { 150, 104, 60, 255 };
+        float y = y0 + 20, w = 70;
+        float xs[3] = { x0 + 10, mid - w / 2, box.x + box.width - 50 - w };
+        static const char *const vals[3] = { "2", "7", "22" };
+        for (int k = 0; k < 3; k++)
+            cell(xs[k], y, w, w, vals[k], parcel, k == 2);
+        for (int k = 0; k < 2; k++) {
+            float ax = xs[k] + w + 14, bx = xs[k + 1] - 14;
+            Rectangle pr = { (ax + bx) / 2 - 80, y - 66, 160, 50 };
+            DrawRectangleRounded(pr, 0.25f, 6, (Color){ 70, 80, 110, 255 });
+            DrawRectangleRoundedLinesEx(pr, 0.25f, 6, 2.0f, UI_ACCENT);
+            ctext("press(n)", pr.x + pr.width / 2, pr.y + 14, FS_SMALL, UI_INK);
+            arrow((Vector2){ ax, y + w / 2 }, (Vector2){ bx, y + w / 2 },
+                  UI_ACCENT);
+            ctext("3 * n + 1", (ax + bx) / 2, y + w + 14, FS_SMALL, UI_MUTED);
+        }
+        ctext("press(press(2)) is press(7), which is 22", mid,
+              box.y + box.height - 50, FS_SMALL, UI_ACCENT);
+        break;
+    }
+    case DIA_SHELF: {
+        static const char *const v[8] = { "14", "3", "27", "8", "61", "", "",
+                                          "" };
+        static const Color f[8] = { { 150, 104, 60, 255 }, { 150, 104, 60, 255 },
+                                    { 150, 104, 60, 255 }, { 150, 104, 60, 255 },
+                                    { 150, 104, 60, 255 }, { 34, 27, 56, 255 },
+                                    { 34, 27, 56, 255 }, { 34, 27, 56, 255 } };
+        DrawText("shelf", (int)x0 - 14, (int)y0 + 22, FS_SMALL, UI_MUTED);
+        cell_row(x0 + 54, y0, 8, v, f, 4, true, 64);
+        ctext("n = 5: the last parcel is in shelf[n - 1]", mid, y0 + 110,
+              FS_SMALL, UI_ACCENT);
+        ctext("deliver 61, 8, 27, 3, 14", mid, box.y + box.height - 50,
+              FS_SMALL, UI_MUTED);
         break;
     }
     case DIA_NONE:

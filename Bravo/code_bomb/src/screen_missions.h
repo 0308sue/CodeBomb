@@ -29,6 +29,9 @@ typedef struct {
 
 /* Draw the map; returns what the player clicked. bomb_done marks
  * defused bombs. / 지도를 그리고 클릭한 것을 돌려준다. */
-MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS]);
+/* mail_solved / mail_total: Mailroom progress on the first button.
+ * mail_solved / mail_total: 첫 버튼에 보이는 우편실 진행 상황. */
+MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS], int mail_solved,
+                          int mail_total);
 
 #endif

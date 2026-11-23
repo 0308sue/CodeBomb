@@ -151,7 +151,7 @@ text, which keeps the other faces uncluttered.
 
 ### Checking it
 
-- `make test`: 377 checks, including all cube modules.
+- `make test`: 451 checks, including all cube modules.
 - `./build/codebomb --selftest`: checks the challenge rules above
   (including card-by-card code exploding on hidden random bombs, and a
   failed Play randomised being safe), the practice rules (the shown bomb
@@ -305,7 +305,7 @@ Predict, Explore, Find the bug을 숨기고, Cube bomb 버튼은 어느 모드�
 
 ### 확인 방법
 
-- `make test`: 큐브 모듈을 포함한 377개 검사.
+- `make test`: 큐브 모듈을 포함한 451개 검사.
 - `./build/codebomb --selftest`: 위의 도전 규칙 (숨은 무작위 폭탄에서 카드별
   코드가 터지는 것, 실패한 Play randomised가 안전한 것 포함)과 연습 규칙
   (화면 폭탄만으로는 완료 안 됨, Play randomised가 카드별 코드를 잡아냄,

@@ -19,15 +19,23 @@
 
 #define LEVEL_MAX_ITEMS 32
 
+#define LEVEL_SHELF_SIZE 8   /* slots on the Back Shelf / 뒤 선반의 칸 수 */
+
 typedef enum {
     LEVEL_EVENT_NONE,
     LEVEL_EVENT_TAKE,
-    LEVEL_EVENT_PUT
+    LEVEL_EVENT_PUT,
+    LEVEL_EVENT_SHRED,       /* shred(n): into the shredder / 파쇄기로     */
+    LEVEL_EVENT_PUT_ODD,     /* put_odd(n): onto the ODD belt / ODD 벨트로 */
+    LEVEL_EVENT_SHELF_SET,   /* shelf[index] = value / 선반에 놓기          */
+    LEVEL_EVENT_SHELF_GET    /* reading shelf[index] / 선반에서 읽기        */
 } LevelEventType;
 
 typedef struct {
     LevelEventType type;
     int32_t        value;
+    int            index;   /* shelf slot for SHELF_SET / SHELF_GET
+                               SHELF_SET / SHELF_GET의 선반 칸 */
 } LevelEvent;
 
 struct LevelDef;
@@ -56,6 +64,18 @@ typedef struct LevelRun {
     int32_t  outbox[LEVEL_MAX_ITEMS];
     int      outbox_len;
 
+    /* Second output: the shredder (level 3) or the ODD belt (level 5).
+     * 두 번째 출력: 파쇄기 (레벨 3) 또는 ODD 벨트 (레벨 5). */
+    int32_t  side_expected[LEVEL_MAX_ITEMS];
+    int      side_expected_len;
+    int32_t  side[LEVEL_MAX_ITEMS];
+    int      side_len;
+
+    /* The Back Shelf (levels 10-11): int shelf[8], empty until written.
+     * 뒤 선반 (레벨 10-11): int shelf[8], 쓰기 전에는 비어 있다. */
+    int32_t  shelf[LEVEL_SHELF_SIZE];
+    bool     shelf_used[LEVEL_SHELF_SIZE];
+
     LevelEvent event;           /* most recent action, for the scene
                                    장면에 전달할 가장 최근 동작 */
 } LevelRun;
@@ -82,6 +102,15 @@ typedef struct LevelDef {
     void (*generate)(LevelRun *run, unsigned seed);
     void (*solve)(LevelRun *run);
 
+    const char *side_name;      /* "shredder", "ODD belt" or NULL
+                                   "shredder", "ODD belt" 또는 NULL */
+    bool        has_shelf;      /* the level gives int shelf[8]
+                                   레벨이 int shelf[8]을 준다 */
+    bool        needs_helper;   /* Submit requires a function like
+                                   int press(int n) that run() calls
+                                   Submit에 int press(int n) 같은 함수가
+                                   필요하다 */
+
     int par_size;               /* statements / 문장 수            */
     int par_speed;              /* average instructions per test
                                    테스트당 평균 실행 명령 수 */
@@ -101,8 +130,13 @@ bool level_check_finished(const LevelRun *run, char *msg, size_t n);
 void level_submit(const LevelDef *def, const Program *prog, int tests,
                   SubmitResult *out);
 void level_format_items(const int32_t *items, int count, char *buf, size_t n);
+/* Level 8: does the program define and call a helper like int press(int n)?
+ * 레벨 8: 프로그램이 int press(int n) 같은 도우미를 정의하고 호출하는가? */
+bool level_has_helper(const Program *prog);
 
 extern const LevelDef LEVEL_MAILROOM;
+extern const LevelDef LEVEL_DAMAGED_GOODS, LEVEL_TWO_BELTS, LEVEL_STAMP_PRESS,
+                      LEVEL_BACK_SHELF, LEVEL_HOLIDAY_RUSH;
 
 /* The Mailroom levels in plan order (docs/MAILROOM.md). NULL = planned,
  * not built yet; its number is shown dimmed.

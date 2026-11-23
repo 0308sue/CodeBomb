@@ -31,7 +31,8 @@ static bool slot(Rectangle r, const char *label, bool ready, Color tint)
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
-MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS])
+MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS], int mail_solved,
+                          int mail_total)
 {
     MissionPick pick = { PICK_NONE, 0 };
     ui_background();
@@ -86,8 +87,13 @@ MissionPick missions_draw(const bool bomb_done[MISSION_BOMBS])
     DrawText("Write real C. Every read and write plays out on the bomb.", 57,
              1018, FS_SMALL, UI_MUTED);
     float bx = 57, by = 1052;
-    if (ui_button((Rectangle){ bx, by, 200, 52 }, "Mailroom", true, false))
+    Rectangle mail = { bx, by, 200, 52 };
+    if (ui_button(mail, TextFormat("Mailroom %d/%d", mail_solved, mail_total),
+                  true, false))
         pick.kind = PICK_MAILROOM;
+    if (mail_total > 0 && mail_solved == mail_total)
+        DrawCircle((int)(mail.x + mail.width - 14), (int)(mail.y + 14), 5,
+                   UI_SUCCESS);
     for (int b = 0; b < MISSION_BOMBS; b++) {
         Rectangle r = { bx + 214.0f * (b + 1), by, 200, 52 };
         const char *label = b == MISSION_BOMBS - 1 ? "Cube bomb"

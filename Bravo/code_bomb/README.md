@@ -47,7 +47,7 @@ between full screen and a window.
 | Bomb → Levels 1-6 | Untimed practice: write C for each of Sumin's 6 levels on a flat bomb; the bomb replays your code. Play randomised (F9) runs it on a new random bomb with the same rule; Hint gives three hints | editor + `array_bridge.c` + `bomb3d.c` + Sumin's engine |
 | Bomb → Cube bomb | The timed challenge: press START, defuse 5 modules in 10:00 with the countdown on the bomb; a wrong run or time-out explodes it, then RESTART | `screen_arrays.c` + `bomb3d.c` |
 | Bomb → Predict / Explore / Find the bug | Sumin's modes, unchanged logic (levels 1-6 only) | ported from `main_SOO.c` |
-| Mailroom | Levels with the 3D robot: 1 Mailroom, 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown (the rest of `docs/MAILROOM.md` is shown dimmed) | editor + VM + `levels.c` |
+| Mailroom | 11 levels with the 3D robot, from statements to arrays (shredder, second belt, stamp press, back shelf); three stars each for solving, size and speed (`docs/MAILROOM.md`) | editor + VM + `levels.c` |
 | Help (every screen, every chapter card) | The field manual: short pages with a diagram, a code example and a tip for each concept. Opens by itself the first time | `help.c` |
 | Exit | Quit the game (asks first) | `main.c` |
 
@@ -76,7 +76,7 @@ and 1 (FAULT).
 ### Tests
 
 ```sh
-make test        # 377 checks, no raylib needed
+make test        # 451 checks, no raylib needed
 make test-asan   # the same with Address/UB sanitizers (macOS/Linux)
 ```
 
@@ -104,7 +104,8 @@ pause, arrows to step, R to restart. **Missions** returns to the map.
 | `src/soo_lessons.*` | Hosts her 40 lessons unchanged, scaled 1.5x (see `docs/INTEGRATION.md`) |
 | `src/help.*` | Field manual pages, diagrams and the Help pop-up |
 | `src/bomb_variants.*` | Random bombs with the same rule, and the hints |
-| `src/screen_mailroom.*`, `src/scene_mailroom.c` | Level 1 with the 3D scene |
+| `src/screen_mailroom.*`, `src/scene_mailroom.c` | The Mailroom screen and its 3D scene (robot tasks, machines) |
+| `src/pbr.*`, `src/pbr_textures.c` | Physically based renderer: shaders, shadow map, meshes and procedural materials (`docs/MAILROOM.md`) |
 | `src/ui.*` | Shared theme, buttons and text (Sumin's palette and widgets) |
 | `src/main.c` | Window, 1920 x 1200 canvas scaling, tabs (Missions, Bomb, Mailroom) |
 | `src/vm.*`, `lexer.*`, `parser.*`, `compiler.*` | C subset compiler and VM |
@@ -165,7 +166,7 @@ cmake --build build-cmake --config Release
 | Bomb → Levels 1-6 | 시간 제한 없는 연습: 납작한 폭탄에서 수민의 6개 레벨을 C로 풀면 폭탄이 코드를 재생. Play randomised (F9)는 같은 규칙의 새 무작위 폭탄에서 실행, Hint는 힌트 세 개 | 에디터 + `array_bridge.c` + `bomb3d.c` + 수민의 엔진 |
 | Bomb → Cube bomb | 시간 제한 도전: START를 누르고 폭탄의 카운트다운 10:00 안에 모듈 5개를 해체. 잘못된 실행이나 시간 초과는 폭발, 그 뒤 RESTART | `screen_arrays.c` + `bomb3d.c` |
 | Bomb → Predict / Explore / Find the bug | 수민의 모드, 로직 그대로 (레벨 1-6만) | `main_SOO.c`에서 옮김 |
-| Mailroom | 3D 로봇이 있는 레벨: 1 Mailroom, 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown (`docs/MAILROOM.md`의 나머지는 흐리게 표시) | 에디터 + VM + `levels.c` |
+| Mailroom | 3D 로봇이 있는 레벨 11개, 문장부터 배열까지 (파쇄기, 두 번째 벨트, 스탬프 프레스, 뒤 선반). 레벨마다 해결, 크기, 속도로 별 세 개 (`docs/MAILROOM.md`) | 에디터 + VM + `levels.c` |
 | Help (모든 화면, 모든 챕터 카드) | 현장 매뉴얼: 개념마다 그림, 코드 예제, 팁이 있는 짧은 페이지. 처음에는 저절로 열림 | `help.c` |
 | Exit | 게임 종료 (먼저 확인) | `main.c` |
 
@@ -194,7 +195,7 @@ Write code 모드에서는 1D 레벨에서 `cards[i]`와 `N`, 2D 레벨에서
 ### 테스트
 
 ```sh
-make test        # 377개 검사, raylib 불필요
+make test        # 451개 검사, raylib 불필요
 make test-asan   # 같은 검사를 Address/UB 새니타이저로 (macOS/Linux)
 ```
 
@@ -221,7 +222,8 @@ make test-asan   # 같은 검사를 Address/UB 새니타이저로 (macOS/Linux)
 | `src/soo_lessons.*` | 수민의 40개 수업을 수정 없이 1.5배로 실행 (`docs/INTEGRATION.md` 참고) |
 | `src/help.*` | 현장 매뉴얼 페이지, 그림, Help 팝업 |
 | `src/bomb_variants.*` | 같은 규칙의 무작위 폭탄과 힌트 |
-| `src/screen_mailroom.*`, `src/scene_mailroom.c` | 3D 장면이 있는 레벨 1 |
+| `src/screen_mailroom.*`, `src/scene_mailroom.c` | 우편실 화면과 3D 장면 (로봇 작업, 기계) |
+| `src/pbr.*`, `src/pbr_textures.c` | 물리 기반 렌더러: 셰이더, 그림자 맵, 메시, 절차적 재질 (`docs/MAILROOM.md`) |
 | `src/ui.*` | 공용 테마, 버튼, 텍스트 (수민의 색상표와 위젯) |
 | `src/main.c` | 창, 1920 x 1200 캔버스 배율, 탭 (Missions, Bomb, Mailroom) |
 | `src/vm.*`, `lexer.*`, `parser.*`, `compiler.*` | C 부분 집합 컴파일러와 VM |

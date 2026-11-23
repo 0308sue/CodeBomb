@@ -103,7 +103,7 @@ standalone app (`make -f Makefile_SOO`) still builds and runs as before.
 
 ### Verification
 
-- `make test`: 377 checks, including all six levels solved with real C and
+- `make test`: 451 checks, including all six levels solved with real C and
   compared with her samples (operation counts 2, 13, 13, 19, 8 and 16; her
   bounds sample fails at `cards[8]` after 13 operations; repeated scans stop
   at 20).
@@ -225,7 +225,7 @@ bug 그리기 코드는 3D 폭탄에 맞춰 `screen_arrays.c`로 옮겼습니다
 
 ### 검증
 
-- `make test`: 377개 검사. 수민의 6개 레벨을 모두 실제 C로 풀고 샘플과
+- `make test`: 451개 검사. 수민의 6개 레벨을 모두 실제 C로 풀고 샘플과
   비교합니다 (연산 횟수 2, 13, 13, 19, 8, 16. 범위 오류 샘플은 13회 연산 뒤
   `cards[8]`에서 실패. 반복 스캔은 20회에서 멈춤).
 - clang과 gcc(`-std=c11 -Wall -Wextra -Wpedantic`)로 raylib 6.0과 5.5 헤더에

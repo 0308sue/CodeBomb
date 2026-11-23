@@ -30,6 +30,8 @@
  *          --shot b4.png arrays code 4 14 0    (bomb 4, 14 steps)
  *          --shot cube.png arrays code 7 6 22  (cube, 2 modules solved)
  *          --shot mail.png mailroom - 1 9 0
+ *          --shot stars.png mailroom stars 1 6 7   (levels 1-6 submitted,
+ *                                                   level 7 open)
  *          --shot h6.png help - 6 1        (field manual 6, page 2)
  *   codebomb --selftest      cube click picking, all 40 lessons and every
  *                            page of the field manual
@@ -230,22 +232,34 @@ static int self_test(Game *g, RenderTexture2D canvas)
     }
     printf("  %d lessons drawn\n", lessons);
     if (lessons != 40) failures++;
-    puts("Mailroom levels (open, run the answer, draw):");
+    puts("Mailroom levels (open, play the answer live, submit, draw):");
     int levels = 0;
     for (int slot = 0; slot < LEVEL_SLOTS; slot++) {
         if (!mailroom_select_level(g->mailroom, slot)) continue;
         help_close();
-        mailroom_qa(g->mailroom, 9, 400);
+        /* the live run drives every scene animation (shredder, belts,
+           press, shelf) to the end / 실시간 실행으로 모든 장면 애니메이션을
+           끝까지 돌린다 */
+        bool played = mailroom_qa_play(g->mailroom, 60.0f);
         mailroom_render_view(g->mailroom);
         BeginTextureMode(canvas);
         mailroom_draw(g->mailroom);
         EndTextureMode();
+        bool submitted = mailroom_qa_submit(g->mailroom);
+        printf("  level %2d: live run %s, submit %s\n", slot + 1,
+               played ? "ok" : "FAILED", submitted ? "ok" : "FAILED");
+        if (!played || !submitted) failures++;
+        mailroom_qa(g->mailroom, 9, 400);
         levels++;
     }
+    int solved, stars;
+    mailroom_progress(g->mailroom, &solved, &stars);
+    printf("  %d levels, %d solved, %d stars\n", levels, solved, stars);
+    if (levels != LEVEL_SLOTS || solved != LEVEL_SLOTS ||
+        stars != 3 * LEVEL_SLOTS)
+        failures++;
     mailroom_select_level(g->mailroom, 0);
     help_close();
-    printf("  %d levels drawn\n", levels);
-    if (levels < 6) failures++;
     puts("Field manual (every page of every topic):");
     int pages = 0;
     for (int t = 0; t < HELP_TOPIC_COUNT; t++) {
@@ -332,7 +346,18 @@ int main(int argc, char **argv)
             }
             /* mode "play": run the answer live for steps / 10 seconds
                mode "play": 정답을 steps / 10초 동안 실제로 재생 */
-            if (strcmp(mode, "play") == 0)
+            if (strcmp(mode, "stars") == 0) {
+                /* submit the answers of levels 1..steps first, so the
+                   level row shows stars / 레벨 1..steps의 정답을 먼저
+                   Submit해 레벨 줄에 별이 보이게 한다 */
+                for (int s = 0; s < steps && s < LEVEL_SLOTS; s++) {
+                    mailroom_select_level(g.mailroom, s);
+                    mailroom_qa_submit(g.mailroom);
+                }
+                mailroom_select_level(g.mailroom, variant > 0 ? variant - 1 : 0);
+                help_close();
+                mailroom_qa(g.mailroom, level - 1, 0);
+            } else if (strcmp(mode, "play") == 0)
                 mailroom_qa_play(g.mailroom, steps / 10.0f);
             else
                 mailroom_qa(g.mailroom, level - 1, steps);
@@ -406,7 +431,10 @@ int main(int argc, char **argv)
         default: {
             bool done_flags[MISSION_BOMBS];
             arrays_defused(g.arrays, done_flags);
-            MissionPick pick = missions_draw(done_flags);
+            int mail_solved, mail_stars;
+            mailroom_progress(g.mailroom, &mail_solved, &mail_stars);
+            MissionPick pick = missions_draw(done_flags, mail_solved,
+                                             LEVEL_SLOTS);
             if (pick.kind == PICK_LESSON && soo_lessons_open(pick.level)) {
                 go(&g, SCREEN_LESSON);
             } else if (pick.kind == PICK_BOMB) {

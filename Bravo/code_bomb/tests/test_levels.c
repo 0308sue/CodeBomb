@@ -89,14 +89,93 @@ void run_level_tests(void)
             LevelRun run;
             level_run_init(&run, l, seed, true);
             if (run.inbox_len < 1 || run.inbox_len > SCENE_MAX ||
-                run.expected_len > SCENE_MAX || run.expected_len < 1)
+                run.expected_len > SCENE_MAX || run.expected_len < 1 ||
+                run.side_expected_len > SCENE_MAX)
                 fits = false;
+            if (l->side_name && seed < 3 && run.side_expected_len < 1)
+                fits = false;           /* the machine has work to show
+                                           기계가 보여 줄 일이 있다 */
         }
         snprintf(what, sizeof what,
                  "level %d inboxes and outboxes hold 1-%d parcels", l->number,
                  SCENE_MAX);
         CHECK(fits, what);
     }
-    CHECK(built >= 6, "at least six Mailroom levels are built");
+    CHECK(built == LEVEL_SLOTS, "all eleven Mailroom levels are built");
+
+    /* Each mistake fails for the reason its Examples line gives.
+     * 각 실수는 Examples 설명에 적힌 이유로 실패한다. */
+    static const struct { int level; const char *example, *says; } WHY[] = {
+        { 3, "No shredder", "damaged" },
+        { 3, "Zero is damaged?", "shred(0): that parcel isn't damaged" },
+        { 5, "Divide, not remainder", "is even" },
+        { 5, "Swapped belts", "is even" },
+        { 8, "Pressed once", "wrong parcel" },
+        { 8, "No function", "int press(int n)" },
+        { 10, "Same order", "wrong parcel" },
+        { 10, "One past the end", "shelf[" },
+        { 11, "Stores the damaged", "damaged" },
+    };
+    for (size_t k = 0; k < sizeof WHY / sizeof WHY[0]; ++k) {
+        const LevelDef *l = LEVEL_LIST[WHY[k].level - 1];
+        const LevelExample *ex = NULL;
+        for (int e = 0; e < l->example_count; ++e)
+            if (strcmp(l->examples[e].name, WHY[k].example) == 0)
+                ex = &l->examples[e];
+        CompileResult r;
+        SubmitResult s;
+        bool found = ex && build(l, ex->source, p, &r);
+        if (found) level_submit(l, p, 5, &s);
+        char what[700];
+        snprintf(what, sizeof what, "level %d '%s' says \"%s\": %s",
+                 WHY[k].level, WHY[k].example, WHY[k].says,
+                 found ? s.message : "(missing)");
+        CHECK(found && strstr(s.message, WHY[k].says) != NULL, what);
+    }
+
+    /* The shelf checks every index, like the bomb's cards[].
+     * 선반은 폭탄의 cards[]처럼 모든 인덱스를 검사한다. */
+    static const struct { const char *src, *says; } SHELF[] = {
+        { "void run(void) { shelf[8] = take(); }", "shelf[8] is outside" },
+        { "void run(void) { shelf[-1] = 1; }", "shelf[-1] is outside" },
+        { "void run(void) { put(shelf[3]); }", "shelf[3] is empty" },
+        { "void run(void) { put(SHELF_SIZE); }", "wrong parcel" },
+        { "void run(void) { int shelf = 2; }", "level's array" },
+    };
+    for (size_t k = 0; k < sizeof SHELF / sizeof SHELF[0]; ++k) {
+        CompileResult r;
+        SubmitResult s;
+        char what[700];
+        if (!build(&LEVEL_BACK_SHELF, SHELF[k].src, p, &r)) {
+            snprintf(what, sizeof what, "shelf: %s -> %s", SHELF[k].src,
+                     r.message);
+            CHECK(strstr(r.message, SHELF[k].says) != NULL, what);
+            continue;
+        }
+        level_submit(&LEVEL_BACK_SHELF, p, 1, &s);
+        snprintf(what, sizeof what, "shelf: %s -> %s", SHELF[k].src, s.message);
+        CHECK(!s.passed && strstr(s.message, SHELF[k].says) != NULL, what);
+    }
+
+    /* Level 8 accepts any helper name, but not a helper that is never used.
+     * 레벨 8은 도우미 이름은 자유지만, 쓰지 않는 도우미는 안 된다. */
+    {
+        CompileResult r;
+        SubmitResult s;
+        const char *renamed =
+            "int stamp(int x) { return x * 3 + 1; }\n"
+            "void run(void) { while (has_input()) {\n"
+            "  int a = stamp(take()); put(stamp(a)); } }\n";
+        CHECK(build(&LEVEL_STAMP_PRESS, renamed, p, &r), "renamed helper compiles");
+        level_submit(&LEVEL_STAMP_PRESS, p, 5, &s);
+        CHECK(s.passed, "level 8: a helper with another name passes");
+        const char *unused =
+            "int press(int n) { return 3 * n + 1; }\n"
+            "void run(void) { while (has_input()) {\n"
+            "  int b = take(); b = 3 * b + 1; put(3 * b + 1); } }\n";
+        CHECK(build(&LEVEL_STAMP_PRESS, unused, p, &r), "unused helper compiles");
+        level_submit(&LEVEL_STAMP_PRESS, p, 5, &s);
+        CHECK(!s.passed, "level 8: a helper that is never called fails");
+    }
     free(p);
 }

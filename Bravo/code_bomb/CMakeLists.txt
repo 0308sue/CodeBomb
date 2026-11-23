@@ -55,7 +55,7 @@ endif()
 
 # ---- game / 게임 ------------------------------------------------------------
 add_executable(codebomb
-    src/main.c src/ui.c src/editor_ui.c src/scene_mailroom.c
+    src/main.c src/ui.c src/editor_ui.c src/scene_mailroom.c src/pbr.c src/pbr_textures.c
     src/screen_mailroom.c src/screen_arrays.c src/screen_missions.c
     src/soo_lessons.c src/help.c src/bomb3d.c
     ${SOO_DIR}/pointer_SOO.c ${SOO_DIR}/stage6_SOO.c ${SOO_DIR}/stage7_SOO.c

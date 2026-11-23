@@ -1,247 +1,268 @@
-# Mailroom: cleanup and expansion plan / 우편실: 정리와 확장 계획
+# Mailroom: levels, machines and the 3D scene / 우편실: 레벨, 기계, 3D 장면
 
 ## English
 
 ### Status
 
-| Phase | State |
-|---|---|
-| 1 | Partly done: the level list (`LEVEL_LIST` in `levels.c`), the level row on the Mailroom screen (planned levels dimmed, a green dot after a passed Submit), saved code per level and a Help topic per level. Still to do: stars and progress on the mission map. |
-| 2 | **Done:** 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown. |
-| 3-5 | Not started. |
+All eleven levels are built. Each one has a starter, a one-line goal, a
+field-manual topic with a diagram of what goes in and comes out, two or three
+programs in its Examples menu that show typical mistakes (never the answer),
+and a reference answer in `levels.c` that is used only by the tests and the
+screenshots.
 
-**Robot animation (done).** The robot keeps every parcel it takes in a stack
-in its arms instead of dropping the old one. On `put(n)` it gets parcel n
-ready where it stands, before walking: if it holds a parcel stamped n it
-keeps that one and the others fly into a recycling bin; if its parcels add
-up to n they slide together and merge, with a pulse, a glow, sparks and a
-"10 + 7 = 17" pop-up; otherwise its parcel is restamped, or a new parcel
-pops into its hands ("new 2"). The number is on the parcel before the robot
-walks to the outbox. The numbers are stickers on each parcel's front face
-and the RECYCLE sign stands in the 3D scene, so the robot and what it
-carries hide whatever is behind them (2D labels used to draw on top).
-
-Each phase 2 level has a starter, a one-line goal, a two-page Help topic
-with a diagram of what goes in and comes out, and two programs in its
-Examples menu that show typical mistakes (never the answer). A reference
-answer lives in `levels.c` for the tests and screenshots only.
-
-Until level 3 (Damaged Goods) exists, level 7's Help topic also teaches
-`if` and `else`.
-
-`tests/test_levels.c` checks every built level: the starter compiles, the
-reference passes 50 random inboxes and meets the level's par (par is the
-reference's size and speed on the game's 5 Submit tests), every example
-fails Submit, and every inbox and outbox holds 1-9 parcels so they fit on
-the belts.
-
-| Level | Inbox | Outbox | Par size / speed |
-|---|---|---|---|
-| 2 Night Shift | 2-7 parcels | the same | 2 / 28 |
-| 4 Weigh Station | 1-3 pairs | each pair's sum | 4 / 23 |
-| 6 Head Count | 2-3 groups of 0-2 parcels, each ended by 0 | each group's count | 5 / 59 |
-| 7 Biggest Box | 1-3 groups of 3 | each group's biggest | 7 / 92 |
-| 9 Countdown | 1-2 parcels of 1-4 | n, n-1, ..., 1 for each | 4 / 61 |
-
-### What changed in the first cleanup
-
-The Mailroom screen had every explanation on screen at once. It now keeps
-only what the player needs while coding:
-
-- **Left panel:** the level title, a one-line goal, the two functions, the
-  editor and the message box. The paragraph about parcels and the controls
-  line moved into the Help screen (three pages: Your job, Statements and
-  calls, Run step and submit). It opens by itself on the first visit.
-- **Examples:** the row of five buttons became **Starter code** and an
-  **Examples** menu. Each example has one line saying what it shows, for
-  example "Bug: take() from an empty inbox".
-- **Inspector:** it opens in a **Simple** view, with the parcels drawn as
-  chips, the program status and the variables. Bytecode and the operand
-  stack moved to a **Machine** view, used with Step op.
-- **Removed:** the duplicated level subtitle, the "Speed 1x" label in the 3D
-  view (the speed buttons already show it) and the row of shortcut keys.
-
-### Design rules for new levels
-
-1. **One new C idea per level.** The level's Help page teaches it before
-   the player starts, as in the field manual for the lessons.
-2. **Submit uses random inboxes.** A level is solved only by code that works
-   for every input, not just the one on screen. This already works through
-   `LevelDef.generate` and `solve`.
-3. **Two optional goals:** size (statements) and speed (average
-   instructions). `par_size` and `par_speed` already exist in `LevelDef`;
-   they become stars.
-4. **The factory floor grows.** Each level adds one machine to the 3D scene,
-   so the scene shows the new idea: a shredder for `if`, a second belt for
-   `%`, a shelf of numbered slots for arrays.
-5. **It leads into the bombs.** The last levels introduce arrays and
-   indices, which are what the bomb defusal levels need.
-
-### Proposed levels
-
-| # | Name | Puzzle | C idea | New machine or native | Compiler work |
+| Level | C idea | Inbox | Output | New machine or native | Par size / speed |
 |---|---|---|---|---|---|
-| 1 | Mailroom (done) | Move 3 parcels in order | statements, calls | `take()`, `put(n)` | none |
-| 2 | Night Shift | Any number of parcels | `while`, loop condition | `has_input()` (already there) | none |
-| 3 | Damaged Goods | Parcels below 0 go to the shredder | `if` / `else`, `<` | `shred(n)`, shredder | none |
-| 4 | Weigh Station | Parcels come in pairs: deliver their sum | variables, `+` `-` | scale display | none |
-| 5 | Two Belts | Even to the left belt, odd to the right | `%`, `==` | `put_left(n)`, `put_right(n)`, second belt | none |
-| 6 | Head Count | Count parcels until a 0, deliver the count | counters, sentinel loop | counter display | none |
-| 7 | Biggest Box | Deliver the largest parcel of each group of 3 | comparison, "best so far" | none | none |
-| 8 | Stamp Press | Deliver every parcel times 3 plus 1, reusing a helper | defining a function, parameters, `return` | stamp press | none (functions already compile) |
-| 9 | Countdown | Parcel n becomes n, n-1, ..., 1 | `for` loops | none | none |
-| 10 | Back Shelf | Deliver the parcels in reverse order | arrays, indices | shelf with numbered slots | local `int shelf[8]` |
-| 11 | Holiday Rush (boss) | Mixed rules from levels 3-9 | everything so far | all machines | none |
+| 1 Mailroom | statements, calls | 3 parcels | the same | `take()`, `put(n)` | 3 / 7 |
+| 2 Night Shift | `while` | 2-7 parcels | the same | `has_input()` | 2 / 28 |
+| 3 Damaged Goods | `if` / `else`, `<` | 3-7 parcels, some below 0 (and 0) | good ones; damaged ones to `shred(n)` | shredder | 5 / 54 |
+| 4 Weigh Station | variables, `+` | 1-3 pairs | each pair's sum | | 4 / 23 |
+| 5 Two Belts | `%`, `==` | 3-8 parcels | even to `put_even(n)`, odd to `put_odd(n)` | second (ODD) belt | 5 / 84 |
+| 6 Head Count | counters, sentinel | 2-3 groups ended by 0 | each group's count | | 5 / 59 |
+| 7 Biggest Box | comparison, best so far | 1-3 groups of 3 | each group's biggest | | 7 / 92 |
+| 8 Stamp Press | functions, parameters, `return` | 2-5 parcels of 1-9 | `press(press(n))`, `press(n) = 3n + 1` | stamp press | 3 / 76 |
+| 9 Countdown | `for` | 1-2 parcels of 1-4 | n, n-1, ..., 1 for each | | 4 / 61 |
+| 10 Back Shelf | arrays, indices | 2-8 parcels | reverse order | `int shelf[8]`, back shelf | 6 / 148 |
+| 11 Holiday Rush | everything | 2-3 groups ended by 0 | per group: shred damaged, deliver the rest reversed | all of them | 11 / 169 |
 
-Levels 2-9 need no compiler changes: the compiler already handles `if`,
-`else`, `while`, `for`, `break`, `continue`, `return` and functions. Level 10
-needs local array declarations. Today arrays exist only as the bomb's
-`cards` and `grid`, through the hidden natives.
+Par is the reference answer's size (statements) and speed (average
+instructions) on the game's 5 Submit tests.
 
-### Other ideas
+### What the new levels check
 
-- **Level chips** in the empty row under the header, like the Bomb screen's
-  level row, with stars for size and speed.
-- **Progress on the mission map:** the Tutorial button becomes "Mailroom 4 /
-  11".
-- **Ghost run:** after a successful Submit, replay the fastest test so the
-  player can see why it was fast.
-- **Hint ladder:** a "Stuck?" button that shows a hint first, then the shape
-  of the loop, and never the full answer.
-- **Mistake gallery:** each level's Examples menu holds one typical wrong
-  program, such as an off-by-one or a forgotten `else`, to run and explain.
+- **Two outputs (levels 3, 5, 11).** `LevelRun` has a second output next to
+  the outbox (`side`, `side_expected`): the shredder or the ODD belt. Each
+  parcel is checked the moment it arrives, and a run only finishes when both
+  outputs are complete ("only 1 of 2 parcels reached the shredder").
+- **Clear mistakes.** A parcel sent to the wrong output says where it
+  belongs: `put(-5)` "that parcel is damaged ... go to shred()", `shred(0)`
+  "that parcel isn't damaged", `put_even(7)` "7 is odd (7 % 2 is 1)".
+- **Your own function (level 8).** Submit also requires a helper that takes
+  a parameter, returns an int and is called from somewhere else
+  (`level_has_helper`). Any name works; a helper that is never called does
+  not. The Examples menu shows the right numbers without a function, so the
+  player sees why Submit still says no, and the pass-by-value mistake
+  (`void press(int n) { n = 3 * n + 1; }`).
+- **The shelf (levels 10, 11).** `int shelf[8]` and `SHELF_SIZE` come from
+  the level, the same way the bombs give `cards[]` and `N`: the compiler turns
+  `shelf[i]` into two hidden natives (`$shelf_get`, `$shelf_set`), so every
+  access is checked. `shelf[8]` and `shelf[-1]` stop with "outside the
+  shelf", and reading a slot that was never written stops with "shelf[5] is
+  empty ... In C an unset slot holds garbage". No compiler change was needed.
 
-### Implementation plan
+### Stars and progress
 
-| Phase | Work | Size |
-|---|---|---|
-| 1 | Level list in `levels.c`, level chips and stars on the Mailroom screen, per-level Help pages (one `HelpTopic` per level, or pages chosen by level) | 1-2 days |
-| 2 | Levels 2, 4, 6, 7 and 9: only new `generate`, `solve`, Help text and examples; the scene is unchanged | 1-2 days |
-| 3 | Scene machines: shredder (3), second belt (5), stamp press (8) as new `LevelEvent` types and animations in `scene_mailroom.c` | 2-3 days |
-| 4 | Local arrays in the compiler and VM (`int shelf[8]`, bounds checks with the bomb's error messages), shelf scene, level 10 | 2-3 days |
-| 5 | Boss level, mission map progress, hint ladder | 1-2 days |
+Each level has three stars: solved, size par met, speed par met. They are
+earned by Submit, kept as the best result, and drawn in the level row, which
+now shows every level as a chip (the open one also shows its name) with the
+total on the right ("4 / 11 solved   9 / 33"). The mission map's first Bomb
+defusal button reads "Mailroom 4/11" and gets a green dot when all eleven are
+solved.
 
-Each level gets the same tests as level 1: the example solution passes
-Submit, every example from the Examples menu fails the way its description
-says, and `--shot mailroom - N` screenshots are checked visually.
+### The robot
+
+The robot keeps every parcel it takes in a stack in its arms. Each call
+becomes a short queue of tasks (walk, prepare, hand over), and the VM waits
+until the queue is empty:
+
+| Call | What the robot does |
+|---|---|
+| `take()` | drives to the INBOX and lifts the front parcel onto its stack |
+| `put(n)` | gets parcel n ready where it stands (keeps a parcel stamped n and recycles the rest; merges parcels that add up to n with a pulse, a glow, sparks and a "10 + 7 = 17" pop-up; restamps; or a new parcel pops up), then sets it on the OUTBOX |
+| `shred(n)` | the same preparation, then tosses the parcel into the shredder, which shakes, flashes its lamp and spits paper strips out of the chute ("-5 < 0: shred") |
+| `put_odd(n)` | onto the ODD belt ("7 % 2 = 1: ODD"); `put_even(n)` goes to the EVEN belt |
+| `put(n)` in level 8 | a changed number is made in the stamp press: the parcel goes onto the bed, the ram slams down, the parcel glows with the new number and comes back ("2 -> press -> 22") |
+| `shelf[i] = n` | walks to slot i and places the parcel; an old parcel in that slot goes to the bin. The slot's index lights up ("shelf[2] = 27") |
+| reading `shelf[i]` | a copy flies from slot i to the robot; the slot keeps its parcel, as in C ("shelf[2] is 27") |
+
+The robot works beside each machine, not in front of it, so the camera can
+always see the machine. Number stickers and floor stencils are real 3D
+decals, so the robot and its stack hide what is behind them.
+
+### The 3D scene: physically based rendering
+
+The Mailroom is drawn by a small renderer in `src/pbr.c` with materials made
+in code by `src/pbr_textures.c`. The game still ships no image files.
+
+- **Materials.** Every material is a set of three textures, like the ones a
+  PBR texturing tool exports: albedo, MRA (red metallic, green roughness,
+  blue ambient occlusion) and a tangent-space normal map. They are painted at
+  start-up from tileable noise: polished concrete with saw-cut joints, stains
+  and pits; kraft cardboard with fibres and fluting (and a water-stained,
+  creased, torn version for damaged parcels); safety-yellow paint with
+  scratches that show bare steel; brushed and oily steel; a cleated rubber
+  belt; hazard stripes; corrugated wall sheet; pallet wood; plastic, paper
+  labels and packing tape. A height field gives each normal map and its
+  occlusion.
+- **Shading.** Cook-Torrance with a GGX distribution, Smith visibility and
+  Schlick Fresnel; ambient light from the sky and the floor; reflections of a
+  simple warehouse environment (skylight strips above, warm concrete below)
+  with Karis' fit of the split-sum BRDF; light fog; ACES tone mapping and
+  gamma. Glowing parts (parcels after a merge, eyes, lamps, sparks) use an
+  emissive term plus soft additive halos.
+- **Lights.** One shadow-casting key light from the skylights (a 2048 x 2048
+  depth map with 5 x 5 filtering and a tight depth range so the bias stays
+  small), three warm work lamps over the lane, and the shredder's warning
+  lamp, which lights the floor while it runs.
+- **Geometry.** Boxes have chamfered edges that catch the light; meshes are
+  built in code with tangents (raylib 5.5's `GenMeshTangents` ignores index
+  buffers, so the renderer does not use it). Belts scroll by moving their
+  texture.
+- **Supersampling.** The scene is rendered at twice the view's size and
+  scaled down, so edges stay smooth without MSAA. `Scene.prerender` runs the
+  shadow pass and this render before the screen's own render texture is
+  bound, because render textures can't be nested.
+- **Fallback.** The shaders are GLSL 330, which Windows, Linux and macOS
+  (OpenGL 3.3 core) accept. If they can't be used (for example raylib's
+  software renderer), the same calls draw the albedo textures without
+  lighting, so the Mailroom still works everywhere.
+
+A slow frame is capped at 0.1 seconds (`main.c`), and the stamp press
+triggers its slam by time rather than by an exact ram position, so a long
+frame can't skip the slam.
+
+### Tests
+
+`tests/test_levels.c` checks every level: the starter compiles; the reference
+passes 50 random inboxes and meets par; every example fails Submit, and nine
+of them fail with the message their Examples line promises; inboxes and both
+outputs hold 1-9 parcels so they fit on the belts, and levels with a machine
+give it work on the first tests; the shelf's bounds and empty-slot errors;
+level 8 accepts a helper with another name and rejects one that is never
+called. `--selftest` plays every level's answer live through the 3D scene to
+the end, submits it, and checks 11 solved and 33 stars.
+
+### Ideas for later
+
+- **Ghost run:** after a successful Submit, replay the fastest test.
+- **Hint ladder:** a "Stuck?" button with a hint, then the shape of the loop,
+  never the full answer (the Bomb screen already has one).
+- **Saved progress:** stars are kept while the game runs; saving them to a
+  file would keep them between sessions.
 
 ## 한국어
 
 ### 진행 상황
 
-| 단계 | 상태 |
-|---|---|
-| 1 | 일부 완료: 레벨 목록 (`levels.c`의 `LEVEL_LIST`), 우편실 화면의 레벨 줄 (계획된 레벨은 흐리게, Submit을 통과하면 초록 점), 레벨별 코드 저장, 레벨별 도움말 주제. 남은 것: 별, 미션 지도의 진행 상황. |
-| 2 | **완료:** 2 Night Shift, 4 Weigh Station, 6 Head Count, 7 Biggest Box, 9 Countdown. |
-| 3-5 | 시작 안 함. |
+레벨 11개를 모두 만들었습니다. 레벨마다 시작 코드, 한 줄 목표, 들어오고 나가는
+것을 보여 주는 그림이 있는 현장 매뉴얼 주제, 흔한 실수를 보여 주는 Examples
+메뉴의 프로그램 2-3개(정답은 아님), 그리고 테스트와 스크린샷에만 쓰는
+`levels.c`의 정답이 있습니다.
 
-**로봇 애니메이션 (완료).** 로봇은 이전 상자를 떨어뜨리지 않고 가져온 상자를
-모두 팔에 쌓아 듭니다. `put(n)`에서는 걷기 전에 그 자리에서 n 상자를
-준비합니다: n이 찍힌 상자를 들고 있으면 그것만 남기고 나머지는 재활용 통으로
-날아가고, 상자들을 더해 n이 되면 하나로 합쳐지며 번쩍이고 빛나고 불꽃과
-"10 + 7 = 17" 팝업이 나오며, 그 밖에는 상자에 숫자를 다시 찍거나 새 상자가
-손에 나타납니다 ("new 2"). 로봇이 출력함으로 걷기 전에 숫자가 이미 상자에
-있습니다. 숫자는 각 상자 앞면의 스티커이고 RECYCLE 표지판은 3D 장면 안에
-있으므로, 로봇과 로봇이 든 것이 뒤의 물체를 가립니다 (전에는 2D 라벨이 맨
-위에 그려졌습니다).
-
-2단계 레벨마다 시작 코드, 한 줄 목표, 들어오고 나가는 것을 보여 주는 그림이
-있는 두 쪽짜리 도움말, 흔한 실수를 보여 주는 Examples 메뉴의 프로그램 두
-개(정답은 아님)가 있습니다. 정답은 테스트와 스크린샷 전용으로 `levels.c`에
-있습니다.
-
-레벨 3 (Damaged Goods)이 생기기 전까지는 레벨 7의 도움말이 `if`와 `else`도
-가르칩니다.
-
-`tests/test_levels.c`는 만들어진 모든 레벨을 검사합니다: 시작 코드가
-컴파일되고, 정답이 무작위 입력함 50개를 통과하며 레벨의 기준(par)을 만족하고
-(기준은 게임의 Submit 테스트 5개에서 정답의 크기와 속도), 모든 예제는
-Submit에 실패하며, 모든 입력함과 출력함이 벨트에 들어가도록 소포 1-9개를
-담습니다.
-
-| 레벨 | 입력함 | 출력함 | 기준 크기 / 속도 |
-|---|---|---|---|
-| 2 Night Shift | 소포 2-7개 | 그대로 | 2 / 28 |
-| 4 Weigh Station | 1-3쌍 | 각 쌍의 합 | 4 / 23 |
-| 6 Head Count | 소포 0-2개인 묶음 2-3개, 각각 0으로 끝남 | 각 묶음의 개수 | 5 / 59 |
-| 7 Biggest Box | 3개씩 1-3묶음 | 각 묶음의 최댓값 | 7 / 92 |
-| 9 Countdown | 1-4인 소포 1-2개 | 각각 n, n-1, ..., 1 | 4 / 61 |
-
-### 첫 정리에서 바뀐 것
-
-우편실 화면에는 모든 설명이 한꺼번에 나와 있었습니다. 이제 코딩하는 동안
-필요한 것만 남겼습니다:
-
-- **왼쪽 패널:** 레벨 제목, 한 줄 목표, 두 함수, 에디터, 메시지 상자. 소포에
-  대한 문단과 단축키 줄은 도움말 화면으로 옮겼습니다 (세 쪽: Your job,
-  Statements and calls, Run step and submit). 처음 들어오면 저절로 열립니다.
-- **예제:** 다섯 개 버튼 줄은 **Starter code**와 **Examples** 메뉴가
-  되었습니다. 각 예제에는 무엇을 보여 주는지 한 줄 설명이 있습니다 (예:
-  "Bug: take() from an empty inbox").
-- **인스펙터:** **Simple** 보기로 시작합니다. 소포는 칩으로 그리고,
-  프로그램 상태와 변수를 보여 줍니다. 바이트코드와 피연산자 스택은
-  Step op와 함께 쓰는 **Machine** 보기로 옮겼습니다.
-- **삭제:** 중복된 레벨 부제목, 3D 화면의 "Speed 1x" 글자 (속도 버튼이 이미
-  보여 줌), 단축키 줄.
-
-### 새 레벨의 설계 규칙
-
-1. **레벨마다 새로운 C 개념 하나.** 시작하기 전에 레벨의 도움말 쪽이 그
-   개념을 가르칩니다 (수업의 현장 매뉴얼처럼).
-2. **Submit은 무작위 입력함을 씁니다.** 화면의 입력뿐 아니라 모든 입력에서
-   동작하는 코드만 통과합니다. `LevelDef.generate`와 `solve`로 이미
-   동작합니다.
-3. **선택 목표 두 가지:** 크기(문장 수)와 속도(평균 명령 수).
-   `LevelDef`에 `par_size`와 `par_speed`가 이미 있으며, 이것이 별이 됩니다.
-4. **공장 바닥이 커집니다.** 레벨마다 3D 장면에 기계 하나를 더해 새 개념을
-   보여 줍니다: `if`에는 파쇄기, `%`에는 두 번째 벨트, 배열에는 번호 붙은
-   선반.
-5. **폭탄으로 이어집니다.** 마지막 레벨들은 폭탄 해체에 필요한 배열과
-   인덱스를 소개합니다.
-
-### 제안 레벨
-
-| # | 이름 | 퍼즐 | C 개념 | 새 기계 또는 네이티브 | 컴파일러 작업 |
+| 레벨 | C 개념 | 입력함 | 출력 | 새 기계 또는 네이티브 | 기준 크기 / 속도 |
 |---|---|---|---|---|---|
-| 1 | Mailroom (완료) | 소포 3개를 순서대로 옮기기 | 문장, 함수 호출 | `take()`, `put(n)` | 없음 |
-| 2 | Night Shift | 소포 개수가 정해지지 않음 | `while`, 반복 조건 | `has_input()` (이미 있음) | 없음 |
-| 3 | Damaged Goods | 0보다 작은 소포는 파쇄기로 | `if` / `else`, `<` | `shred(n)`, 파쇄기 | 없음 |
-| 4 | Weigh Station | 소포가 두 개씩 옴: 합을 배달 | 변수, `+` `-` | 저울 표시창 | 없음 |
-| 5 | Two Belts | 짝수는 왼쪽, 홀수는 오른쪽 벨트 | `%`, `==` | `put_left(n)`, `put_right(n)`, 두 번째 벨트 | 없음 |
-| 6 | Head Count | 0이 나올 때까지 세고 개수를 배달 | 카운터, 끝 표시 반복 | 카운터 표시창 | 없음 |
-| 7 | Biggest Box | 세 개씩 묶음에서 가장 큰 소포 배달 | 비교, "지금까지 최고" | 없음 | 없음 |
-| 8 | Stamp Press | 모든 소포를 3배 더하기 1로, 도우미 함수 재사용 | 함수 정의, 매개변수, `return` | 도장 기계 | 없음 (함수는 이미 컴파일됨) |
-| 9 | Countdown | 소포 n을 n, n-1, ..., 1로 | `for` 반복 | 없음 | 없음 |
-| 10 | Back Shelf | 소포를 거꾸로 배달 | 배열, 인덱스 | 번호 붙은 선반 | 지역 `int shelf[8]` |
-| 11 | Holiday Rush (보스) | 레벨 3-9의 규칙이 섞임 | 지금까지의 모든 것 | 모든 기계 | 없음 |
+| 1 Mailroom | 문장, 함수 호출 | 소포 3개 | 그대로 | `take()`, `put(n)` | 3 / 7 |
+| 2 Night Shift | `while` | 소포 2-7개 | 그대로 | `has_input()` | 2 / 28 |
+| 3 Damaged Goods | `if` / `else`, `<` | 소포 3-7개, 일부는 0 미만 (0도 있음) | 좋은 소포, 손상된 것은 `shred(n)` | 파쇄기 | 5 / 54 |
+| 4 Weigh Station | 변수, `+` | 1-3쌍 | 각 쌍의 합 | | 4 / 23 |
+| 5 Two Belts | `%`, `==` | 소포 3-8개 | 짝수는 `put_even(n)`, 홀수는 `put_odd(n)` | 두 번째 (ODD) 벨트 | 5 / 84 |
+| 6 Head Count | 카운터, 끝 표시 | 0으로 끝나는 묶음 2-3개 | 각 묶음의 개수 | | 5 / 59 |
+| 7 Biggest Box | 비교, 지금까지 최고 | 3개씩 1-3묶음 | 각 묶음의 최댓값 | | 7 / 92 |
+| 8 Stamp Press | 함수, 매개변수, `return` | 1-9인 소포 2-5개 | `press(press(n))`, `press(n) = 3n + 1` | 스탬프 프레스 | 3 / 76 |
+| 9 Countdown | `for` | 1-4인 소포 1-2개 | 각각 n, n-1, ..., 1 | | 4 / 61 |
+| 10 Back Shelf | 배열, 인덱스 | 소포 2-8개 | 거꾸로 | `int shelf[8]`, 뒤 선반 | 6 / 148 |
+| 11 Holiday Rush | 종합 | 0으로 끝나는 묶음 2-3개 | 묶음마다: 손상된 것은 파쇄, 나머지는 거꾸로 배달 | 모든 기계 | 11 / 169 |
 
-레벨 2-9는 컴파일러를 바꿀 필요가 없습니다: 컴파일러는 이미 `if`, `else`,
-`while`, `for`, `break`, `continue`, `return`, 함수를 처리합니다. 레벨 10에는
-지역 배열 선언이 필요합니다. 지금 배열은 숨겨진 네이티브를 통한 폭탄의
-`cards`와 `grid`뿐입니다.
+기준(par)은 게임의 Submit 테스트 5개에서 정답의 크기(문장 수)와 속도(평균
+명령 수)입니다.
 
-### 그 밖의 아이디어
+### 새 레벨이 검사하는 것
 
-- 헤더 아래 빈 줄에 Bomb 화면처럼 **레벨 버튼**을 두고, 크기와 속도 별을
-  표시합니다.
-- **미션 지도의 진행 상황:** Tutorial 버튼이 "Mailroom 4 / 11"이 됩니다.
-- **고스트 실행:** Submit에 성공하면 가장 빠른 테스트를 다시 재생해 왜
-  빨랐는지 보여 줍니다.
-- **힌트 사다리:** "Stuck?" 버튼은 먼저 힌트를, 그다음 반복문의 모양을
-  보여 주고, 정답 전체는 보여 주지 않습니다.
-- **실수 모음:** 레벨마다 Examples 메뉴에 흔한 잘못된 프로그램 하나(하나
-  차이 오류, 빠뜨린 `else` 등)를 넣어 실행하고 설명합니다.
+- **출력 두 개 (레벨 3, 5, 11).** `LevelRun`에는 출력함 옆에 두 번째 출력
+  (`side`, `side_expected`)이 있습니다: 파쇄기 또는 ODD 벨트. 소포는 도착하는
+  순간 검사되고, 두 출력이 모두 채워져야 실행이 끝납니다 ("only 1 of 2 parcels
+  reached the shredder").
+- **분명한 실수 메시지.** 잘못된 출력으로 보낸 소포는 어디로 가야 하는지
+  알려 줍니다: `put(-5)` "that parcel is damaged ... go to shred()",
+  `shred(0)` "that parcel isn't damaged", `put_even(7)` "7 is odd (7 % 2 is 1)".
+- **직접 쓴 함수 (레벨 8).** Submit은 매개변수를 받고 int를 돌려주며 다른
+  곳에서 호출되는 도우미 함수도 요구합니다 (`level_has_helper`). 이름은
+  자유지만 한 번도 호출하지 않는 도우미는 안 됩니다. Examples 메뉴에는 함수
+  없이 숫자만 맞는 프로그램이 있어 Submit이 왜 여전히 거부하는지 볼 수 있고,
+  값에 의한 전달 실수(`void press(int n) { n = 3 * n + 1; }`)도 있습니다.
+- **선반 (레벨 10, 11).** `int shelf[8]`과 `SHELF_SIZE`는 폭탄이 `cards[]`와
+  `N`을 주는 것과 같은 방식으로 레벨이 줍니다: 컴파일러가 `shelf[i]`를 숨겨진
+  네이티브 두 개(`$shelf_get`, `$shelf_set`)로 바꾸므로 모든 접근이
+  검사됩니다. `shelf[8]`과 `shelf[-1]`은 "outside the shelf"로 멈추고, 한 번도
+  쓰지 않은 칸을 읽으면 "shelf[5] is empty ... In C an unset slot holds
+  garbage"로 멈춥니다. 컴파일러는 바꿀 필요가 없었습니다.
 
-### 구현 계획
+### 별과 진행 상황
 
-| 단계 | 작업 | 규모 |
-|---|---|---|
-| 1 | `levels.c`의 레벨 목록, 우편실 화면의 레벨 버튼과 별, 레벨별 도움말 쪽 (레벨마다 `HelpTopic` 하나 또는 레벨에 따라 고른 쪽) | 1-2일 |
-| 2 | 레벨 2, 4, 6, 7, 9: 새 `generate`, `solve`, 도움말 글, 예제만 필요하고 장면은 그대로 | 1-2일 |
-| 3 | 장면 기계: 파쇄기(3), 두 번째 벨트(5), 도장 기계(8)를 새 `LevelEvent` 종류와 `scene_mailroom.c`의 애니메이션으로 | 2-3일 |
-| 4 | 컴파일러와 VM의 지역 배열 (`int shelf[8]`, 폭탄과 같은 오류 메시지의 범위 검사), 선반 장면, 레벨 10 | 2-3일 |
-| 5 | 보스 레벨, 미션 지도 진행 상황, 힌트 사다리 | 1-2일 |
+레벨마다 별이 세 개입니다: 해결, 크기 기준 달성, 속도 기준 달성. Submit으로
+얻고 가장 좋은 결과가 남으며, 레벨 줄에 그려집니다. 레벨 줄은 이제 모든
+레벨을 칩으로 보여 주고 (열린 레벨은 이름도), 오른쪽에 합계를 보여 줍니다
+("4 / 11 solved   9 / 33"). 미션 지도의 첫 Bomb defusal 버튼은 "Mailroom
+4/11"이 되고, 11개를 모두 풀면 초록 점이 붙습니다.
 
-레벨마다 레벨 1과 같은 테스트를 둡니다: 예시 정답이 Submit을 통과하고,
-Examples 메뉴의 모든 예제가 설명대로 실패하며, `--shot mailroom - N`
-스크린샷을 눈으로 확인합니다.
+### 로봇
+
+로봇은 가져온 상자를 모두 팔에 쌓아 듭니다. 호출마다 짧은 작업 대기열(걷기,
+준비, 건네기)이 되고, VM은 대기열이 빌 때까지 기다립니다:
+
+| 호출 | 로봇이 하는 일 |
+|---|---|
+| `take()` | 입력함으로 가서 맨 앞 상자를 더미에 올린다 |
+| `put(n)` | 그 자리에서 n 상자를 준비한다 (n이 찍힌 상자만 남기고 나머지는 재활용, 합이 n인 상자들은 번쩍임, 빛, 불꽃, "10 + 7 = 17" 팝업과 함께 합치기, 다시 찍기, 또는 새 상자). 그다음 출력함에 놓는다 |
+| `shred(n)` | 같은 준비 뒤 파쇄기에 던진다. 파쇄기는 흔들리고 경고등이 깜빡이며 배출구로 종이 조각을 내뱉는다 ("-5 < 0: shred") |
+| `put_odd(n)` | ODD 벨트로 ("7 % 2 = 1: ODD"). `put_even(n)`은 EVEN 벨트로 |
+| 레벨 8의 `put(n)` | 바뀐 숫자는 스탬프 프레스에서 만든다: 상자가 받침에 올라가고 램이 쾅 내려오며, 상자가 새 숫자로 빛나며 돌아온다 ("2 -> press -> 22") |
+| `shelf[i] = n` | i칸으로 가서 상자를 놓는다. 그 칸의 이전 상자는 통으로 간다. 칸 번호가 빛난다 ("shelf[2] = 27") |
+| `shelf[i]` 읽기 | 복사본이 i칸에서 로봇에게 날아온다. C처럼 칸에는 상자가 그대로 남는다 ("shelf[2] is 27") |
+
+로봇은 기계 앞이 아니라 옆에서 일하므로 카메라가 항상 기계를 볼 수 있습니다.
+숫자 스티커와 바닥 글자는 실제 3D 데칼이라서 로봇과 로봇이 든 더미가 뒤의
+것을 가립니다.
+
+### 3D 장면: 물리 기반 렌더링
+
+우편실은 `src/pbr.c`의 작은 렌더러가 그리고, 재질은 `src/pbr_textures.c`가
+코드로 만듭니다. 게임에는 여전히 이미지 파일이 없습니다.
+
+- **재질.** 모든 재질은 PBR 텍스처 도구가 내보내는 것과 같은 텍스처 세 장입니다:
+  알베도, MRA (빨강 금속성, 초록 거칠기, 파랑 주변광 차폐), 접선 공간 노멀 맵.
+  시작할 때 이어지는 노이즈로 그립니다: 줄눈, 얼룩, 작은 구멍이 있는 연마
+  콘크리트, 섬유와 골이 보이는 크라프트 골판지 (손상된 소포용으로 물 얼룩,
+  주름, 찢긴 모서리가 있는 판), 긁힌 곳에 강철이 드러나는 안전 노랑 도장,
+  헤어라인 강철과 기름 묻은 강철, 돌기가 있는 고무 벨트, 경고 줄무늬, 골함석
+  벽, 팔레트 나무, 플라스틱, 종이 라벨, 포장 테이프. 높이 맵에서 노멀 맵과
+  차폐를 만듭니다.
+- **셰이딩.** GGX 분포, Smith 가시성, Schlick 프레넬을 쓰는 Cook-Torrance,
+  하늘과 바닥에서 오는 주변광, 간단한 창고 환경(위의 천창 줄, 아래의 따뜻한
+  콘크리트)의 반사와 Karis의 split-sum BRDF 근사, 옅은 안개, ACES 톤 매핑과
+  감마. 빛나는 부분 (합쳐진 상자, 눈, 램프, 불꽃)은 발광 항과 부드러운 가산
+  혼합 빛을 씁니다.
+- **조명.** 천창에서 오는 그림자 주 조명 하나 (2048 x 2048 깊이 맵, 5 x 5
+  필터, 바이어스를 작게 유지하는 좁은 깊이 범위), 통로 위의 따뜻한 작업등
+  세 개, 작동하는 동안 바닥을 비추는 파쇄기 경고등.
+- **형상.** 상자는 모서리를 깎아 빛을 받습니다. 메시는 접선과 함께 코드로
+  만듭니다 (raylib 5.5의 `GenMeshTangents`는 인덱스 버퍼를 무시하므로 쓰지
+  않습니다). 벨트는 텍스처를 움직여 흐릅니다.
+- **슈퍼샘플링.** 장면을 뷰의 두 배 크기로 그린 뒤 줄여서, MSAA 없이도
+  가장자리가 매끄럽습니다. 렌더 텍스처는 중첩할 수 없으므로
+  `Scene.prerender`가 화면의 렌더 텍스처를 연결하기 전에 그림자 단계와 이
+  렌더를 실행합니다.
+- **대체 경로.** 셰이더는 GLSL 330이라 Windows, Linux, macOS (OpenGL 3.3
+  core)에서 동작합니다. 쓸 수 없으면 (예: raylib 소프트웨어 렌더러) 같은
+  호출이 조명 없이 알베도 텍스처만 그리므로 우편실은 어디서나 동작합니다.
+
+느린 프레임은 0.1초로 제한되고 (`main.c`), 스탬프 프레스는 램의 정확한
+위치가 아니라 시간으로 쾅을 일으키므로 긴 프레임이 쾅을 건너뛸 수 없습니다.
+
+### 테스트
+
+`tests/test_levels.c`는 모든 레벨을 검사합니다: 시작 코드가 컴파일되고, 정답이
+무작위 입력함 50개를 통과하며 기준을 만족하고, 모든 예제가 Submit에
+실패하며 그중 9개는 Examples 설명에 적힌 메시지로 실패하고, 입력함과 두 출력이
+벨트에 들어가도록 소포 1-9개를 담으며, 기계가 있는 레벨은 첫 테스트에서 기계에
+일을 줍니다. 선반의 범위 오류와 빈 칸 오류, 그리고 레벨 8이 다른 이름의
+도우미는 받아들이고 호출하지 않는 도우미는 거부하는지도 검사합니다.
+`--selftest`는 모든 레벨의 정답을 3D 장면으로 끝까지 실시간 재생하고, Submit한
+뒤 11개 해결과 별 33개를 확인합니다.
+
+### 나중을 위한 아이디어
+
+- **고스트 실행:** Submit에 성공하면 가장 빠른 테스트를 다시 재생합니다.
+- **힌트 사다리:** 힌트, 그다음 반복문의 모양을 보여 주고 정답 전체는 보여
+  주지 않는 "Stuck?" 버튼 (Bomb 화면에는 이미 있습니다).
+- **진행 저장:** 별은 게임이 실행되는 동안 남습니다. 파일에 저장하면 다음에도
+  남습니다.

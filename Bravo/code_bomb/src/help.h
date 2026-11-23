@@ -36,11 +36,16 @@ typedef enum {
     HELP_CHAPTER_8,
     HELP_BOMB,           /* writing code for bombs, the cube challenge */
     HELP_MAILROOM,
-    HELP_NIGHT_SHIFT,    /* Mailroom levels 2-9 / 우편실 레벨 2-9 */
+    HELP_NIGHT_SHIFT,    /* Mailroom levels 2-11 / 우편실 레벨 2-11 */
     HELP_WEIGH_STATION,
     HELP_HEAD_COUNT,
     HELP_BIGGEST_BOX,
     HELP_COUNTDOWN,
+    HELP_DAMAGED_GOODS,  /* Mailroom levels 3, 5, 8, 10, 11 */
+    HELP_TWO_BELTS,
+    HELP_STAMP_PRESS,
+    HELP_BACK_SHELF,
+    HELP_HOLIDAY_RUSH,
     HELP_TOPIC_COUNT
 } HelpTopic;
 

@@ -39,7 +39,7 @@ CORE_SRC := $(addprefix src/, vm.c levels.c programs.c lexer.c parser.c \
             bomb_variants.c) \
             $(SOO_DIR)/array_core_SOO.c
 # Game: raylib screens / 게임: raylib 화면
-GAME_SRC := $(addprefix src/, main.c ui.c editor_ui.c scene_mailroom.c \
+GAME_SRC := $(addprefix src/, main.c ui.c editor_ui.c scene_mailroom.c pbr.c pbr_textures.c \
             screen_mailroom.c screen_arrays.c screen_missions.c \
             soo_lessons.c help.c bomb3d.c) \
             $(addprefix $(SOO_DIR)/, pointer_SOO.c stage6_SOO.c stage7_SOO.c \
