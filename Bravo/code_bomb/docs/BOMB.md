@@ -64,6 +64,19 @@ sets the shown bomb's cards one by one defuses the shown bomb but fails
 within 10 random bombs. (Level 1 is the exception: `cards[2] = 0;` is the
 rule itself.)
 
+A random bomb must never be stricter than the bomb on screen. Each kind's
+rule is one function, `bomb_rule_goal()`, and the tests check that it gives
+exactly the shown bomb's goal, and that other correct ways of writing each
+answer (a sweep with `if`, writing 0 everywhere, a `while` loop, `!cards[i]`,
+two-pointer Mirror ...) defuse 300 random bombs. This caught a bug in level
+1: random bombs had extra FAULT cards that had to stay, so a correct sweep
+failed. Now, as on screen, `cards[2]` is the only FAULT and every card must
+end SAFE.
+
+When a random bomb ends with the wrong cards, the message names the first
+wrong one ("Not defused: cards[4] is 1 but its target is 0") instead of
+Sumin's general "Incomplete".
+
 ### Hints
 
 The **Hint** button on the MISSION line opens a card with three hints per
@@ -138,7 +151,7 @@ text, which keeps the other faces uncluttered.
 
 ### Checking it
 
-- `make test`: 326 checks, including all cube modules.
+- `make test`: 377 checks, including all cube modules.
 - `./build/codebomb --selftest`: checks the challenge rules above
   (including card-by-card code exploding on hidden random bombs, and a
   failed Play randomised being safe), the practice rules (the shown bomb
@@ -214,6 +227,18 @@ Bomb 화면의 왼쪽 패널은 3D 장면입니다: 나무 탁자 위의 폭탄.
 코드는 화면 폭탄은 해체하지만 무작위 폭탄 10개 안에 실패합니다. (레벨 1은
 예외: `cards[2] = 0;`이 바로 규칙입니다.)
 
+무작위 폭탄은 화면 폭탄보다 엄격하면 안 됩니다. 종류마다 규칙은 함수 하나
+`bomb_rule_goal()`이며, 테스트는 그것이 화면 폭탄의 목표와 정확히 같은지,
+그리고 각 답을 쓰는 다른 올바른 방법 (`if`가 있는 순회, 모두 0 쓰기, `while`
+반복, `!cards[i]`, 두 포인터 Mirror ...)이 무작위 폭탄 300개를 해체하는지
+확인합니다. 이 검사로 레벨 1의 버그를 찾았습니다: 무작위 폭탄에 그대로
+남아야 하는 FAULT 카드가 더 있어서 올바른 순회가 실패했습니다. 이제 화면과
+같이 `cards[2]`만 FAULT이고 모든 카드가 SAFE로 끝나야 합니다.
+
+무작위 폭탄이 틀린 카드로 끝나면, 메시지는 수민의 일반적인 "Incomplete" 대신
+처음 틀린 카드를 알려 줍니다 ("Not defused: cards[4] is 1 but its target is
+0").
+
 ### 힌트
 
 MISSION 줄의 **Hint** 버튼은 폭탄마다 힌트 세 개가 있는 카드를 엽니다.
@@ -280,7 +305,7 @@ Predict, Explore, Find the bug을 숨기고, Cube bomb 버튼은 어느 모드�
 
 ### 확인 방법
 
-- `make test`: 큐브 모듈을 포함한 326개 검사.
+- `make test`: 큐브 모듈을 포함한 377개 검사.
 - `./build/codebomb --selftest`: 위의 도전 규칙 (숨은 무작위 폭탄에서 카드별
   코드가 터지는 것, 실패한 Play randomised가 안전한 것 포함)과 연습 규칙
   (화면 폭탄만으로는 완료 안 됨, Play randomised가 카드별 코드를 잡아냄,

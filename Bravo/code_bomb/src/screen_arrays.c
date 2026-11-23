@@ -361,11 +361,28 @@ static void code_step(ArraysScreen *a)
                  a->variant.seed,
                  a->shown_ok[kind] ? ". Press Play randomised for another."
                                    : ": now press Run for the bomb on screen.");
-    } else if (applied && a->random_mode && a->cstate.status == SOO_FAILURE &&
-               a->shown_ok[kind]) {
-        size_t used = strlen(a->cstate.message);
-        snprintf(a->cstate.message + used, sizeof a->cstate.message - used,
-                 " Your code works on the bomb on screen, not on this one.");
+    } else if (applied && a->random_mode && a->cstate.status == SOO_FAILURE) {
+        /* Say which card is wrong instead of only "Incomplete".
+         * "Incomplete" 대신 어느 카드가 틀렸는지 알려 준다. */
+        const SooLevel *l = a->cstate.level;
+        if (strncmp(a->cstate.message, "Incomplete", 10) == 0) {
+            for (int c = 0; c < l->rows * l->cols; ++c) {
+                if (a->cstate.cells[c] == l->goal[c]) continue;
+                char where[48];
+                if (l->rows == 1) snprintf(where, sizeof where, "cards[%d]", c);
+                else snprintf(where, sizeof where, "grid[%d][%d]", c / l->cols,
+                              c % l->cols);
+                snprintf(a->cstate.message, sizeof a->cstate.message,
+                         "Not defused: %s is %d but its target is %d.", where,
+                         a->cstate.cells[c], l->goal[c]);
+                break;
+            }
+        }
+        if (a->shown_ok[kind]) {
+            size_t used = strlen(a->cstate.message);
+            snprintf(a->cstate.message + used, sizeof a->cstate.message - used,
+                     " Your code works on the bomb on screen, not on this one.");
+        }
     } else if (applied && !a->random_mode &&
                a->cstate.status == SOO_SUCCESS) {
         a->shown_ok[kind] = true;
@@ -1673,6 +1690,29 @@ int arrays_self_test(ArraysScreen *a)
     /* Practice level 2: the bomb on screen alone doesn't complete it.
      * 연습 레벨 2: 화면의 폭탄만으로는 완료되지 않는다. */
     puts("Practice bombs and random bombs:");
+    /* Regression: a full sweep is right on level 1 ("Set cards[2] to 0"),
+     * so it must defuse random level 1 bombs too.
+     * 회귀 검사: 레벨 1에서는 전체 순회도 정답이므로 무작위 레벨 1 폭탄도
+     * 해체해야 한다. */
+    set_level(a, 0);
+    st_run(a, "void run(void) {\n"
+              "    for (int i =0; i<N; i++)\n"
+              "    {\n"
+              "        if (cards[i] == 1)\n"
+              "        {\n"
+              "            cards[i] = 0;\n"
+              "        }\n"
+              "    }\n"
+              "}\n");
+    bool sweep_ok = a->shown_ok[BOMB_L1];
+    for (int k = 0; k < 5; k++) {
+        play_random(a);
+        for (int s = 0; s < 2000 && a->cplaying; s++) code_step(a);
+        if (a->cstate.status != SOO_SUCCESS) sweep_ok = false;
+    }
+    failures += st_check(sweep_ok && a->completed[0],
+                         "level 1: a full sweep defuses 5 random bombs:");
+    exit_random(a);
     set_level(a, 1);
     st_run(a, "void run(void) {\n"
               "    cards[0] = 0; cards[2] = 0; cards[3] = 0;\n"

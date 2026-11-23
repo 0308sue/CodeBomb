@@ -76,7 +76,7 @@ and 1 (FAULT).
 ### Tests
 
 ```sh
-make test        # 326 checks, no raylib needed
+make test        # 377 checks, no raylib needed
 make test-asan   # the same with Address/UB sanitizers (macOS/Linux)
 ```
 
@@ -194,7 +194,7 @@ Write code 모드에서는 1D 레벨에서 `cards[i]`와 `N`, 2D 레벨에서
 ### 테스트
 
 ```sh
-make test        # 326개 검사, raylib 불필요
+make test        # 377개 검사, raylib 불필요
 make test-asan   # 같은 검사를 Address/UB 새니타이저로 (macOS/Linux)
 ```
 

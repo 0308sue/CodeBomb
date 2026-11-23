@@ -17,7 +17,9 @@ keeps that one and the others fly into a recycling bin; if its parcels add
 up to n they slide together and merge, with a pulse, a glow, sparks and a
 "10 + 7 = 17" pop-up; otherwise its parcel is restamped, or a new parcel
 pops into its hands ("new 2"). The number is on the parcel before the robot
-walks to the outbox.
+walks to the outbox. The numbers are stickers on each parcel's front face
+and the RECYCLE sign stands in the 3D scene, so the robot and what it
+carries hide whatever is behind them (2D labels used to draw on top).
 
 Each phase 2 level has a starter, a one-line goal, a two-page Help topic
 with a diagram of what goes in and comes out, and two programs in its
@@ -139,7 +141,9 @@ says, and `--shot mailroom - N` screenshots are checked visually.
 날아가고, 상자들을 더해 n이 되면 하나로 합쳐지며 번쩍이고 빛나고 불꽃과
 "10 + 7 = 17" 팝업이 나오며, 그 밖에는 상자에 숫자를 다시 찍거나 새 상자가
 손에 나타납니다 ("new 2"). 로봇이 출력함으로 걷기 전에 숫자가 이미 상자에
-있습니다.
+있습니다. 숫자는 각 상자 앞면의 스티커이고 RECYCLE 표지판은 3D 장면 안에
+있으므로, 로봇과 로봇이 든 것이 뒤의 물체를 가립니다 (전에는 2D 라벨이 맨
+위에 그려졌습니다).
 
 2단계 레벨마다 시작 코드, 한 줄 목표, 들어오고 나가는 것을 보여 주는 그림이
 있는 두 쪽짜리 도움말, 흔한 실수를 보여 주는 Examples 메뉴의 프로그램 두

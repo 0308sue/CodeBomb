@@ -45,6 +45,11 @@ BombKind bomb_kind_for_module(int module);   /* 0-4 */
  * give a different bomb. / 이 종류의 무작위 폭탄 seed번을 만든다. */
 void bomb_variant_make(BombVariant *v, BombKind kind, unsigned seed);
 
+/* The bomb's rule: the target for these cards and this size.
+ * 폭탄의 규칙: 이 카드와 크기에 대한 목표. */
+void bomb_rule_goal(BombKind kind, int rows, int cols, const int *initial,
+                    int *goal);
+
 /* Hints from gentle to almost the answer. / 가벼운 힌트부터 거의 정답까지. */
 const char *bomb_hint(BombKind kind, int n);
 

@@ -60,6 +60,47 @@ static void grid_size(unsigned *s, int rmin, int rmax, int cmin, int cmax,
     } while (*rows * *cols > SOO_MAX_CELLS);
 }
 
+/* The rule of each bomb: the target for any cards and size. Random bombs
+ * use it, and the tests check it gives exactly the goal of the bomb on
+ * screen, so a random bomb never asks for more than the shown one.
+ * 각 폭탄의 규칙: 어떤 카드와 크기에도 목표를 정한다. 무작위 폭탄이 이것을
+ * 쓰고, 테스트는 화면 폭탄의 목표와 정확히 같은지 확인한다. 그래서 무작위
+ * 폭탄은 화면 폭탄보다 더 많은 것을 요구하지 않는다. */
+void bomb_rule_goal(BombKind kind, int rows, int cols, const int *in,
+                    int *goal)
+{
+    int cells = rows * cols;
+    for (int k = 0; k < cells; ++k) goal[k] = 0;   /* "every FAULT -> SAFE" */
+    switch (kind) {
+    case BOMB_L5:              /* only the diagonal is repaired */
+        for (int k = 0; k < cells; ++k) goal[k] = in[k];
+        for (int i = 0; i < rows && i < cols; ++i) goal[i * cols + i] = 0;
+        break;
+    case BOMB_INVERT:
+        for (int k = 0; k < cells; ++k) goal[k] = 1 - in[k];
+        break;
+    case BOMB_EVENS:
+        for (int k = 0; k < cells; ++k) goal[k] = k % 2 == 0;
+        break;
+    case BOMB_MIRROR:
+        for (int k = 0; k < cells; ++k) goal[k] = in[k];
+        for (int i = 0; i < cols / 2; ++i) goal[cols - 1 - i] = in[i];
+        break;
+    case BOMB_CHECKER:
+        for (int i = 0; i < rows; ++i)
+            for (int j = 0; j < cols; ++j) goal[i * cols + j] = (i + j) % 2;
+        break;
+    case BOMB_BORDER:
+        for (int i = 0; i < rows; ++i)
+            for (int j = 0; j < cols; ++j)
+                goal[i * cols + j] = i == 0 || j == 0 || i == rows - 1 ||
+                                     j == cols - 1;
+        break;
+    default:                   /* levels 1, 2, 3, 4 and 6: all SAFE */
+        break;
+    }
+}
+
 void bomb_variant_make(BombVariant *v, BombKind kind, unsigned seed)
 {
     const SooLevel *base = kind <= BOMB_L6 ? &SOO_LEVELS[kind]
@@ -73,85 +114,65 @@ void bomb_variant_make(BombVariant *v, BombKind kind, unsigned seed)
     l->objective = base->objective;
 
     unsigned s = seed * 2654435761u + (unsigned)kind * 7919u + 17u;
-    int *in = l->initial, *goal = l->goal;
+    int *in = l->initial;
     l->rows = 1;
 
+    /* size, cards and budget; the target comes from the rule below
+       크기, 카드, 예산. 목표는 아래 규칙에서 나온다 */
     switch (kind) {
-    case BOMB_L1:              /* set cards[2] to 0, leave the rest alone */
+    case BOMB_L1:
+        /* "Set cards[2] to 0": like the bomb on screen, cards[2] is the
+         * only FAULT, so both cards[2] = 0; and a full sweep are right.
+         * "cards[2]를 0으로": 화면 폭탄처럼 cards[2]만 FAULT이므로
+         * cards[2] = 0;과 전체 순회 모두 정답이다. */
         l->cols = range(&s, 3, 8);
-        fill(in, l->cols, &s);
         in[2] = 1;
-        memcpy(goal, in, sizeof l->goal);
-        goal[2] = 0;
         l->budget = 20;
         break;
-    case BOMB_L2:              /* every FAULT becomes SAFE */
-    case BOMB_L3:              /* the same, scanning right to left */
+    case BOMB_L2:
+    case BOMB_L3:
         l->cols = range(&s, 3, 10);
         fill(in, l->cols, &s);
         l->budget = 5 * l->cols;
         break;
-    case BOMB_L4:              /* every FAULT in the grid becomes SAFE */
+    case BOMB_L4:
         /* grids keep 2+ rows: one row would make it cards[], not grid[][]
            격자는 2줄 이상: 한 줄이면 grid[][]가 아니라 cards[]가 된다 */
         grid_size(&s, 2, 4, 2, 6, &l->rows, &l->cols);
         fill(in, l->rows * l->cols, &s);
         l->budget = 4 * l->rows * l->cols + 2;
         break;
-    case BOMB_L5:              /* only the diagonal grid[i][i] is repaired */
+    case BOMB_L5:
         l->rows = l->cols = range(&s, 2, 4);
         fill(in, l->rows * l->cols, &s);
-        memcpy(goal, in, sizeof l->goal);
-        for (int i = 0; i < l->rows; ++i) goal[i * l->cols + i] = 0;
         l->budget = 4 * l->rows;
         break;
-    case BOMB_L6:              /* every FAULT to SAFE within 2 ops per card */
+    case BOMB_L6:
         l->cols = range(&s, 6, 12);
         fill(in, l->cols, &s);
         l->budget = 2 * l->cols;
         break;
     case BOMB_INVERT:
-        l->cols = range(&s, 3, 9);
-        fill(in, l->cols, &s);
-        for (int i = 0; i < l->cols; ++i) goal[i] = 1 - in[i];
-        l->budget = 2 * l->cols;
-        break;
     case BOMB_EVENS:
-        l->cols = range(&s, 3, 9);
-        fill(in, l->cols, &s);
-        for (int i = 0; i < l->cols; ++i) goal[i] = i % 2 == 0;
-        l->budget = 2 * l->cols;
-        break;
     case BOMB_MIRROR:
         l->cols = range(&s, 3, 9);           /* odd sizes too / 홀수 크기도 */
         fill(in, l->cols, &s);
-        memcpy(goal, in, sizeof l->goal);
-        for (int i = 0; i < l->cols / 2; ++i) goal[l->cols - 1 - i] = in[i];
         l->budget = 2 * l->cols;
         break;
     case BOMB_CHECKER:
         grid_size(&s, 2, 4, 2, 6, &l->rows, &l->cols);
         fill(in, l->rows * l->cols, &s);
-        for (int i = 0; i < l->rows; ++i)
-            for (int j = 0; j < l->cols; ++j)
-                goal[i * l->cols + j] = (i + j) % 2;
         l->budget = 2 * l->rows * l->cols;
         break;
     case BOMB_BORDER:
         grid_size(&s, 3, 4, 3, 6, &l->rows, &l->cols);
         fill(in, l->rows * l->cols, &s);
-        for (int i = 0; i < l->rows; ++i)
-            for (int j = 0; j < l->cols; ++j)
-                goal[i * l->cols + j] = i == 0 || j == 0 || i == l->rows - 1 ||
-                                        j == l->cols - 1;
         l->budget = 2 * l->rows * l->cols;
         break;
     default:
         break;
     }
-    /* "every FAULT becomes SAFE" bombs leave goal at all 0
-       "모든 FAULT를 SAFE로" 폭탄은 goal이 모두 0 */
-
+    bomb_rule_goal(kind, l->rows, l->cols, l->initial, l->goal);
     if (kind == BOMB_L3) array_mark_reverse(l);
 }
 
@@ -162,8 +183,8 @@ static const char *const HINTS[BOMB_KIND_COUNT][BOMB_HINTS] = {
         "Indexes start at 0, so cards[2] is the third card.",
         "One assignment is enough: the array name, the index in [ ], then = "
         "and the new value.",
-        "cards[2] = 0; is the whole answer. Leave the other cards alone: on a "
-        "random bomb they must stay as they are.",
+        "cards[2] = 0; is the whole answer. A loop that repairs every FAULT "
+        "works too: on every bomb, cards[2] is the only FAULT.",
     },
     [BOMB_L2] = {
         "Visit every index from 0 up to N - 1 with a for loop.",

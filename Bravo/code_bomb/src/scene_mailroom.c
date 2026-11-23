@@ -17,6 +17,10 @@
  *             - otherwise its parcel is restamped n, or a new parcel pops
  *               into its hands.
  *           Then it drives to the outbox and sets the parcel down.
+ *
+ *   The numbers are stickers on each parcel's front face and the RECYCLE
+ *   sign stands in the 3D scene, so the robot and the parcels it carries
+ *   hide whatever is behind them (2D labels were always drawn on top).
  *           걷기 전에 로봇은 그 자리에서 n 상자를 준비한다:
  *             - n이 찍힌 상자를 들고 있으면 그것만 남기고 나머지는 재활용
  *               통으로 보낸다;
@@ -24,10 +28,15 @@
  *               번쩍이고 빛난다 ("10 + 7 = 17");
  *             - 그 밖에는 상자에 n을 다시 찍거나, 새 상자가 손에 나타난다.
  *           그다음 출력함으로 가서 상자를 내려놓는다.
+ *
+ *   숫자는 각 상자 앞면의 스티커이고 RECYCLE 표지판은 3D 장면 안에 서 있으므로,
+ *   로봇과 로봇이 든 상자가 뒤에 있는 것을 가린다 (2D 라벨은 항상 맨 위에
+ *   그려졌다).
  */
 #include "scene.h"
 
 #include "raylib.h"
+#include "rlgl.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -36,6 +45,7 @@
 
 #define MAX_PARCELS  64
 #define MAX_SPARKS   96
+#define TEXT_CACHE   48       /* number textures kept / 보관하는 숫자 텍스처 */
 #define HAND_MAX     4        /* parcels the robot can stack / 들 수 있는 상자 */
 #define LANE_Z       1.6f
 #define INBOX_X     -4.2f
@@ -77,6 +87,12 @@ typedef struct {
     Color   c;
 } Spark;
 
+typedef struct {
+    int       value;
+    bool      used;
+    Texture2D tex;
+} NumberTex;
+
 typedef enum { PHASE_IDLE, PHASE_PREP, PHASE_WALK, PHASE_WORK } Phase;
 typedef enum { PREP_NONE, PREP_SORT, PREP_MERGE, PREP_STAMP, PREP_NEW } PrepKind;
 
@@ -108,6 +124,10 @@ typedef struct {
 
     float    time;
     Camera3D cam;
+
+    NumberTex numbers[TEXT_CACHE];   /* "17" drawn once, reused / 한 번 그려 재사용 */
+    int       numbers_next;
+    Texture2D recycle_sign;
 } Mailroom;
 
 /* ---- helpers / 도우미 --------------------------------------------------- */
@@ -228,8 +248,15 @@ static void mailroom_reset(void *state, const LevelRun *run)
 {
     Mailroom *m = state;
     Camera3D cam = m->cam;
+    NumberTex numbers[TEXT_CACHE];
+    memcpy(numbers, m->numbers, sizeof numbers);
+    int next_slot = m->numbers_next;
+    Texture2D sign = m->recycle_sign;
     memset(m, 0, sizeof *m);
     m->cam = cam;
+    memcpy(m->numbers, numbers, sizeof numbers);   /* textures stay loaded */
+    m->numbers_next = next_slot;
+    m->recycle_sign = sign;
 
     for (int i = run->inbox_pos; i < run->inbox_len; ++i) {
         int idx = spawn(m, run->inbox[i], inbox_slot(m->inbox_len));
@@ -524,6 +551,67 @@ static void draw_bin(const Mailroom *m)
                  0.55f * squash, 0.02f, 16, (Color){ 30, 50, 40, 255 });
 }
 
+/* Texture with a number printed in black (made once per value).
+ * 검은색 숫자가 찍힌 텍스처 (값마다 한 번 만든다). */
+static Texture2D number_tex(Mailroom *m, int value)
+{
+    for (int i = 0; i < TEXT_CACHE; ++i)
+        if (m->numbers[i].used && m->numbers[i].value == value)
+            return m->numbers[i].tex;
+    NumberTex *n = &m->numbers[m->numbers_next];
+    m->numbers_next = (m->numbers_next + 1) % TEXT_CACHE;
+    if (n->used) UnloadTexture(n->tex);
+    Image img = ImageText(TextFormat("%d", value), 40, (Color){ 30, 30, 30, 255 });
+    n->tex = LoadTextureFromImage(img);
+    UnloadImage(img);
+    SetTextureFilter(n->tex, TEXTURE_FILTER_BILINEAR);
+    n->value = value;
+    n->used = true;
+    return n->tex;
+}
+
+/* A textured rectangle facing +z (the camera side of the parcels).
+ * +z (상자에서 카메라 쪽)를 향한 텍스처 사각형. */
+static void draw_text_quad(Texture2D tex, Vector3 c, float w, float h)
+{
+    rlSetTexture(tex.id);
+    rlBegin(RL_QUADS);
+    rlColor4ub(255, 255, 255, 255);
+    rlNormal3f(0.0f, 0.0f, 1.0f);
+    rlTexCoord2f(0.0f, 0.0f);
+    rlVertex3f(c.x - w * 0.5f, c.y + h * 0.5f, c.z);
+    rlTexCoord2f(0.0f, 1.0f);
+    rlVertex3f(c.x - w * 0.5f, c.y - h * 0.5f, c.z);
+    rlTexCoord2f(1.0f, 1.0f);
+    rlVertex3f(c.x + w * 0.5f, c.y - h * 0.5f, c.z);
+    rlTexCoord2f(1.0f, 0.0f);
+    rlVertex3f(c.x + w * 0.5f, c.y + h * 0.5f, c.z);
+    rlEnd();
+    rlSetTexture(0);
+}
+
+/* The number sticker on the parcel's front face. It is part of the 3D
+ * scene, so anything in front of the parcel hides it.
+ * 상자 앞면의 숫자 스티커. 3D 장면의 일부라서 상자 앞의 물체가 가린다. */
+static void draw_sticker(Mailroom *m, const Parcel *p, float s)
+{
+    if (p->state == P_MERGING || p->scale < 0.4f) return;
+    Texture2D tex = number_tex(m, (int)p->value);
+    float h = s * 0.5f;
+    float w = h * (float)tex.width / (float)tex.height;
+    float max_w = s * 0.9f;
+    if (w > max_w) {
+        h *= max_w / w;
+        w = max_w;
+    }
+    float zf = p->pos.z + s * 0.5f;
+    Color paper = mix((Color){ 250, 245, 230, 255 },
+                      (Color){ 255, 220, 90, 255 }, p->glow);
+    DrawCube(v3(p->pos.x, p->pos.y, zf + 0.006f), w + s * 0.12f,
+             h + s * 0.1f, 0.012f, paper);
+    draw_text_quad(tex, v3(p->pos.x, p->pos.y, zf + 0.014f), w, h);
+}
+
 static void draw_parcel(const Parcel *p)
 {
     /* elastic pop after a merge or stamp / 합치거나 찍은 뒤 튕기는 효과 */
@@ -608,6 +696,12 @@ static void mailroom_draw(void *state, int w, int h)
     Mailroom *m = state;
     ClearBackground((Color){ 30, 32, 38, 255 });
 
+    /* make any new number textures before the 3D pass starts
+       3D 그리기 전에 새 숫자 텍스처를 만든다 */
+    for (int i = 0; i < MAX_PARCELS; ++i)
+        if (m->parcels[i].state != P_DEAD)
+            number_tex(m, (int)m->parcels[i].value);
+
     BeginMode3D(m->cam);
     DrawPlane(v3(0.0f, -0.02f, -1.5f), (Vector2){ 18.0f, 14.0f },
               (Color){ 50, 54, 62, 255 });
@@ -619,9 +713,19 @@ static void mailroom_draw(void *state, int w, int h)
     draw_conveyor(OUTBOX_X, m->time, -1.0f);
     draw_bin(m);
 
-    for (int i = 0; i < MAX_PARCELS; ++i)
-        if (m->parcels[i].state != P_DEAD) draw_parcel(&m->parcels[i]);
+    for (int i = 0; i < MAX_PARCELS; ++i) {
+        const Parcel *p = &m->parcels[i];
+        if (p->state == P_DEAD) continue;
+        draw_parcel(p);
+        float pop = 1.0f + 0.35f * p->pulse * cosf((1.0f - p->pulse) * 14.0f);
+        draw_sticker(m, p, BOX * p->scale * pop);
+    }
     draw_robot(m);
+    /* the RECYCLE sign above the bin, inside the 3D scene
+       통 위의 RECYCLE 표지판 (3D 장면 안) */
+    if (m->recycle_sign.id != 0)
+        DrawBillboard(m->cam, m->recycle_sign,
+                      v3(BIN_POS.x, 1.35f, BIN_POS.z), 0.55f, WHITE);
     draw_glows(m);
     EndMode3D();
 
@@ -630,20 +734,6 @@ static void mailroom_draw(void *state, int w, int h)
                sign_bg, (Color){ 120, 200, 255, 255 }, w, h);
     draw_label(m->cam, v3(OUTBOX_X, 0.05f, LANE_Z + 1.2f), "OUTBOX", 20,
                sign_bg, (Color){ 130, 230, 140, 255 }, w, h);
-    draw_label(m->cam, v3(BIN_POS.x, 1.2f, BIN_POS.z), "RECYCLE", 20, sign_bg,
-               (Color){ 140, 220, 170, 255 }, w, h);
-
-    for (int i = 0; i < MAX_PARCELS; ++i) {
-        const Parcel *p = &m->parcels[i];
-        if (p->state == P_DEAD || p->state == P_MERGING || p->scale < 0.4f)
-            continue;
-        Vector3 face = v3(p->pos.x, p->pos.y, p->pos.z + BOX * p->scale * 0.5f);
-        Color bg = mix((Color){ 250, 245, 230, 235 },
-                       (Color){ 255, 220, 90, 235 }, p->glow);
-        draw_label(m->cam, face, TextFormat("%d", (int)p->value),
-                   p->pulse > 0.3f ? 30 : 20, bg, (Color){ 30, 30, 30, 255 },
-                   w, h);
-    }
 
     if (m->popup_t > 0) {
         /* the sum rises above the robot / 합계가 로봇 위로 떠오른다 */
@@ -656,7 +746,15 @@ static void mailroom_draw(void *state, int w, int h)
     }
 }
 
-static void mailroom_destroy(void *state) { free(state); }
+static void mailroom_destroy(void *state)
+{
+    Mailroom *m = state;
+    if (!m) return;
+    for (int i = 0; i < TEXT_CACHE; ++i)
+        if (m->numbers[i].used) UnloadTexture(m->numbers[i].tex);
+    if (m->recycle_sign.id != 0) UnloadTexture(m->recycle_sign);
+    free(m);
+}
 
 Scene scene_mailroom_create(void)
 {
@@ -667,6 +765,14 @@ Scene scene_mailroom_create(void)
         m->cam.up = v3(0.0f, 1.0f, 0.0f);
         m->cam.fovy = 42.0f;
         m->cam.projection = CAMERA_PERSPECTIVE;
+        /* the RECYCLE sign: light text on a dark plate
+           RECYCLE 표지판: 어두운 판 위의 밝은 글자 */
+        int tw = MeasureText("RECYCLE", 40);
+        Image img = GenImageColor(tw + 24, 52, (Color){ 20, 26, 24, 235 });
+        ImageDrawText(&img, "RECYCLE", 12, 6, 40, (Color){ 140, 220, 170, 255 });
+        m->recycle_sign = LoadTextureFromImage(img);
+        UnloadImage(img);
+        SetTextureFilter(m->recycle_sign, TEXTURE_FILTER_BILINEAR);
     }
     Scene s = {
         .state = m,

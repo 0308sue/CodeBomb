@@ -49,6 +49,109 @@ static void make_cheat(const SooLevel *l, char *buf, size_t n)
     snprintf(buf + used, n - used, "}\n");
 }
 
+/* Other correct ways to write each answer (written the way students do).
+ * Each one defuses the bomb on screen, so it must defuse every random bomb
+ * too: a random bomb may never be stricter than the bomb on screen.
+ * 각 답을 쓰는 다른 올바른 방법 (학생들이 쓰는 방식). 모두 화면 폭탄을
+ * 해체하므로 모든 무작위 폭탄도 해체해야 한다: 무작위 폭탄은 화면 폭탄보다
+ * 엄격하면 안 된다. */
+#define SWEEP_1D "void run(void) {\n" \
+                 "    for (int i =0; i<N; i++)\n" \
+                 "    {\n" \
+                 "        if (cards[i] == 1)\n" \
+                 "        {\n" \
+                 "            cards[i] = 0;\n" \
+                 "        }\n" \
+                 "    }\n" \
+                 "}\n"
+#define ZERO_1D "void run(void) {\n" \
+                "    for (int i = 0; i < N; i++)\n" \
+                "        cards[i] = 0;\n" \
+                "}\n"
+#define ZERO_2D "void run(void) {\n" \
+                "    for (int i = 0; i < ROWS; i++)\n" \
+                "        for (int j = 0; j < COLS; j++)\n" \
+                "            grid[i][j] = 0;\n" \
+                "}\n"
+
+static const char *const ALTERNATIVES[BOMB_KIND_COUNT][4] = {
+    [BOMB_L1] = { SWEEP_1D, ZERO_1D,
+                  "void run(void) {\n    cards[2] = 0;\n}\n", NULL },
+    [BOMB_L2] = { SWEEP_1D, ZERO_1D,
+                  "void run(void) {\n"
+                  "    int i = 0;\n"
+                  "    while (i < N) {\n"
+                  "        if (cards[i]) cards[i] = 0;\n"
+                  "        i++;\n"
+                  "    }\n"
+                  "}\n", NULL },
+    [BOMB_L3] = { "void run(void) {\n"
+                  "    for (int i = N - 1; i >= 0; i--)\n"
+                  "        if (cards[i] == 1) cards[i] = 0;\n"
+                  "}\n", NULL, NULL, NULL },
+    [BOMB_L4] = { ZERO_2D,
+                  "void run(void) {\n"
+                  "    for (int i = 0; i < ROWS; i++)\n"
+                  "        for (int j = 0; j < COLS; j++)\n"
+                  "            if (grid[i][j] == 1) grid[i][j] = 0;\n"
+                  "}\n", NULL, NULL },
+    [BOMB_L5] = { "void run(void) {\n"
+                  "    for (int i = 0; i < ROWS; i++)\n"
+                  "        grid[i][i] = 0;\n"
+                  "}\n", NULL, NULL, NULL },
+    [BOMB_L6] = { SWEEP_1D, ZERO_1D, NULL, NULL },
+    [BOMB_INVERT] = { "void run(void) {\n"
+                      "    for (int i = 0; i < N; i++) {\n"
+                      "        if (cards[i] == 1) cards[i] = 0;\n"
+                      "        else cards[i] = 1;\n"
+                      "    }\n"
+                      "}\n",
+                      "void run(void) {\n"
+                      "    for (int i = 0; i < N; i++)\n"
+                      "        cards[i] = !cards[i];\n"
+                      "}\n", NULL, NULL },
+    [BOMB_EVENS] = { "void run(void) {\n"
+                     "    for (int i = 0; i < N; i++) {\n"
+                     "        if (i % 2 == 0) cards[i] = 1;\n"
+                     "        else cards[i] = 0;\n"
+                     "    }\n"
+                     "}\n",
+                     "void run(void) {\n"
+                     "    for (int i = 0; i < N; i++)\n"
+                     "        cards[i] = 1 - i % 2;\n"
+                     "}\n", NULL, NULL },
+    [BOMB_MIRROR] = { "void run(void) {\n"
+                      "    for (int i = 0; i < N; i++)\n"
+                      "        cards[N - 1 - i] = cards[i];\n"
+                      "}\n",
+                      "void run(void) {\n"
+                      "    int left = 0;\n"
+                      "    int right = N - 1;\n"
+                      "    while (left < right) {\n"
+                      "        cards[right] = cards[left];\n"
+                      "        left++;\n"
+                      "        right--;\n"
+                      "    }\n"
+                      "}\n", NULL, NULL },
+    [BOMB_CHECKER] = { "void run(void) {\n"
+                       "    for (int i = 0; i < ROWS; i++)\n"
+                       "        for (int j = 0; j < COLS; j++) {\n"
+                       "            if ((i + j) % 2 == 0) grid[i][j] = 0;\n"
+                       "            else grid[i][j] = 1;\n"
+                       "        }\n"
+                       "}\n", NULL, NULL, NULL },
+    [BOMB_BORDER] = { "void run(void) {\n"
+                      "    for (int i = 0; i < ROWS; i++)\n"
+                      "        for (int j = 0; j < COLS; j++) {\n"
+                      "            if (i == 0 || i == ROWS - 1 || j == 0 ||\n"
+                      "                j == COLS - 1)\n"
+                      "                grid[i][j] = 1;\n"
+                      "            else\n"
+                      "                grid[i][j] = 0;\n"
+                      "        }\n"
+                      "}\n", NULL, NULL, NULL },
+};
+
 void run_variant_tests(void)
 {
     Program *prog = malloc(sizeof *prog);
@@ -84,6 +187,44 @@ void run_variant_tests(void)
             }
             array_unmark_reverse(l);
         }
+        /* the rule reproduces the shown bomb's goal exactly
+           규칙이 화면 폭탄의 목표를 정확히 만든다 */
+        int goal[SOO_MAX_CELLS];
+        bomb_rule_goal(kind, base->rows, base->cols, base->initial, goal);
+        bool same = true;
+        for (int c = 0; c < base->rows * base->cols; ++c)
+            if (goal[c] != base->goal[c]) same = false;
+        snprintf(what, sizeof what, "%s: the rule gives the shown bomb's goal",
+                 base->title);
+        CHECK(same, what);
+
+        /* every correct way of writing it defuses every random bomb
+           올바른 모든 작성 방법이 모든 무작위 폭탄을 해체한다 */
+        for (int a = 0; a < 4 && ALTERNATIVES[k][a]; ++a) {
+            const char *alt = ALTERNATIVES[k][a];
+            bool shown = array_check_source(alt, (int)strlen(alt), base, prog,
+                                            vm, t, why, sizeof why);
+            snprintf(what, sizeof what,
+                     "%s: alternative answer %d defuses the shown bomb (%s)",
+                     base->title, a + 1, shown ? "ok" : why);
+            CHECK(shown, what);
+            bool fair = true;
+            for (unsigned seed = 1; seed <= 300 && fair; ++seed) {
+                bomb_variant_make(v, kind, seed);
+                if (!array_check_source(alt, (int)strlen(alt), &v->level, prog,
+                                        vm, t, why, sizeof why)) {
+                    fair = false;
+                    printf("  %s alternative %d, random bomb %u: %s\n",
+                           base->title, a + 1, seed, why);
+                }
+                array_unmark_reverse(&v->level);
+            }
+            snprintf(what, sizeof what,
+                     "%s: alternative answer %d defuses 300 random bombs",
+                     base->title, a + 1);
+            CHECK(fair, what);
+        }
+
         snprintf(what, sizeof what, "%s: random bombs fit the engine",
                  base->title);
         CHECK(shapes, what);
