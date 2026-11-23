@@ -32,6 +32,14 @@ typedef struct {
 
 struct LevelDef;
 
+/* A program in the level's Examples menu (usually a typical mistake).
+ * 레벨의 Examples 메뉴에 있는 프로그램 (보통 흔한 실수). */
+typedef struct {
+    const char *name;
+    const char *about;          /* one line / 한 줄 설명 */
+    const char *source;
+} LevelExample;
+
 typedef struct LevelRun {
     const struct LevelDef *def;
     unsigned seed;
@@ -56,11 +64,19 @@ typedef struct LevelDef {
     int         number;
     const char *title;
     const char *concept;
-    const char *brief;
+    const char *brief;          /* full explanation (Help screen)
+                                   전체 설명 (도움말 화면) */
+    const char *goal;           /* one line shown on screen / 화면의 한 줄 */
     const char *tools;          /* one-line list of available functions
                                    사용 가능한 함수 목록 (한 줄) */
     const char *starter;        /* code shown when the level opens
                                    레벨을 열 때 보여 줄 시작 코드 */
+    const LevelExample *examples;   /* NULL: level 1 uses programs.c
+                                       NULL: 레벨 1은 programs.c 사용 */
+    int         example_count;
+    const char *reference;      /* a working answer, for tests and
+                                   screenshots only (never shown)
+                                   테스트와 스크린샷 전용 정답 (화면에 없음) */
 
     void (*register_natives)(Program *p);
     void (*generate)(LevelRun *run, unsigned seed);
@@ -87,5 +103,13 @@ void level_submit(const LevelDef *def, const Program *prog, int tests,
 void level_format_items(const int32_t *items, int count, char *buf, size_t n);
 
 extern const LevelDef LEVEL_MAILROOM;
+
+/* The Mailroom levels in plan order (docs/MAILROOM.md). NULL = planned,
+ * not built yet; its number is shown dimmed.
+ * 계획 순서의 우편실 레벨 (docs/MAILROOM.md). NULL = 계획됨, 아직 없음.
+ * 번호는 흐리게 표시된다. */
+#define LEVEL_SLOTS 11
+extern const LevelDef *const LEVEL_LIST[LEVEL_SLOTS];
+extern const char *const LEVEL_NAMES[LEVEL_SLOTS];
 
 #endif

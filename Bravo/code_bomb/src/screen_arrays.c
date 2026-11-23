@@ -13,6 +13,23 @@
  *
  * Predict, Explore and Find the bug keep Sumin's logic (main_SOO.c).
  * Predict, Explore, Find the bug은 수민의 로직(main_SOO.c)을 그대로 쓴다.
+ *
+ * Levels 1-6 are untimed practice. The Cube bomb is the timed challenge:
+ *   READY    - the player reads the missions and presses START
+ *   RUNNING  - the countdown runs on the bomb's top display
+ *   FUSE     - a run failed: a short pause on the strike, then...
+ *   EXPLODED - the explosion plays, then a RESTART button appears
+ *   DEFUSED  - all five modules solved in time
+ * A run that ends in a strike or leaves its module unsolved, or the clock
+ * reaching 00:00, explodes the bomb. Compile errors never do.
+ * 레벨 1-6은 시간 제한 없는 연습이다. 큐브 폭탄은 시간 제한 도전이다:
+ *   READY    - 미션을 읽고 START를 누른다
+ *   RUNNING  - 폭탄 윗면 표시창에서 카운트다운이 진행된다
+ *   FUSE     - 실행이 실패했다: 스트라이크를 잠깐 보여 준 뒤...
+ *   EXPLODED - 폭발이 재생되고 RESTART 버튼이 나타난다
+ *   DEFUSED  - 시간 안에 다섯 모듈을 모두 풀었다
+ * 스트라이크로 끝나거나 모듈을 풀지 못한 채 끝난 실행, 또는 시계가 00:00에
+ * 닿으면 폭탄이 터진다. 컴파일 오류는 터지지 않는다.
  */
 #include "screen_arrays.h"
 
@@ -24,11 +41,22 @@
 #include "quiz_SOO.h"
 #include "ui.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef enum { MODE_CODE, MODE_PREDICT, MODE_EXPLORE, MODE_BUG } ArraysMode;
+
+typedef enum { CH_READY, CH_RUNNING, CH_FUSE, CH_EXPLODED, CH_DEFUSED }
+    ChallengePhase;
+
+#define CUBE_TIME_LIMIT 600.0f   /* 10 minutes / 10분 */
+#define FUSE_SECONDS    0.8f     /* strike shown before the blast
+                                    폭발 전에 스트라이크를 보여 주는 시간 */
+#define RESTART_DELAY   1.6f     /* let the explosion play first
+                                    폭발을 먼저 보여 준다 */
+#define ALERT_SECONDS   30.0f    /* display blinks / 표시창 깜박임 */
 
 #define LEVEL_CUBE  SOO_LEVEL_COUNT            /* index of the cube bomb */
 #define LEVEL_TOTAL (SOO_LEVEL_COUNT + 1)
@@ -86,6 +114,13 @@ struct ArraysScreen {
 
     BombView          *bomb;
     BombScene          scene;
+
+    /* Cube bomb challenge / 큐브 폭탄 도전 */
+    ChallengePhase     phase;
+    float              time_left;
+    float              phase_t;          /* seconds in FUSE / EXPLODED */
+    char               boom_reason[200];
+    float              qa_settle;        /* screenshot override / 스크린샷용 */
 };
 
 static const SooLevel *cur_level(const ArraysScreen *a)
@@ -95,6 +130,17 @@ static const SooLevel *cur_level(const ArraysScreen *a)
 }
 
 static bool is_cube(const ArraysScreen *a) { return a->level == LEVEL_CUBE; }
+
+/* Editor and Run are locked before START and after the explosion.
+ * START 전과 폭발 후에는 에디터와 Run이 잠긴다. */
+static bool locked(const ArraysScreen *a)
+{
+    return is_cube(a) && a->mode == MODE_CODE &&
+           (a->phase == CH_READY || a->phase == CH_FUSE ||
+            a->phase == CH_EXPLODED);
+}
+
+static void challenge_fail(ArraysScreen *a, const char *reason);
 
 /* ========================================================================
  * Sumin's sample logic (unchanged behaviour) / 수민의 샘플 로직 (동작 동일)
@@ -263,16 +309,32 @@ static void code_step(ArraysScreen *a)
             bool all = true;
             for (int m = 0; m < CUBE_MODULE_COUNT; m++)
                 if (!a->module_done[m]) all = false;
-            if (all) a->completed[LEVEL_CUBE] = true;
+            if (all) {
+                a->completed[LEVEL_CUBE] = true;
+                if (a->phase == CH_RUNNING) a->phase = CH_DEFUSED;
+            }
         } else {
             a->completed[a->level] = true;
         }
     }
     if (code_done(a)) a->cplaying = false;
+
+    /* In the challenge a failed run sets the bomb off.
+     * 도전 중에는 실패한 실행이 폭탄을 터뜨린다. */
+    if (is_cube(a) && a->phase == CH_RUNNING && code_done(a) &&
+        a->cstate.status != SOO_SUCCESS) {
+        const char *why = a->cstate.status == SOO_FAILURE
+                              ? a->cstate.message
+                              : "The code finished, but the cards don't match "
+                                "the target.";
+        challenge_fail(a, TextFormat("Module %d (%s): %s", a->module + 1,
+                                     cube_module_name(a->module), why));
+    }
 }
 
 static void code_run(ArraysScreen *a)
 {
+    if (locked(a)) return;
     if (a->cplaying) {
         a->cplaying = false;
         return;
@@ -285,6 +347,7 @@ static void code_run(ArraysScreen *a)
 
 static void code_step_key(ArraysScreen *a)
 {
+    if (locked(a)) return;
     a->cplaying = false;
     if (!code_prepare(a)) return;
     code_step(a);
@@ -466,6 +529,93 @@ static void DrawExplore(ArraysScreen *a)
 }
 
 /* ========================================================================
+ * Cube bomb challenge / 큐브 폭탄 도전
+ * ====================================================================== */
+
+/* A fresh bomb: all modules armed, full time. The player's code is kept.
+ * 새 폭탄: 모든 모듈이 다시 무장되고 시간이 가득 찬다. 코드는 그대로 둔다. */
+static void challenge_reset(ArraysScreen *a)
+{
+    bool here = is_cube(a) && a->mode == MODE_CODE;
+    if (here) code_save(a);
+    for (int m = 0; m < CUBE_MODULE_COUNT; m++) {
+        a->module_done[m] = false;
+        SooReset(&a->module_state[m], &CUBE_MODULES[m]);
+    }
+    a->phase = CH_READY;
+    a->time_left = CUBE_TIME_LIMIT;
+    a->phase_t = 0;
+    a->boom_reason[0] = '\0';
+    if (here) code_load(a);
+}
+
+static void challenge_start(ArraysScreen *a)
+{
+    challenge_reset(a);
+    a->phase = CH_RUNNING;
+    a->ed->focused = true;
+}
+
+static void challenge_fail(ArraysScreen *a, const char *reason)
+{
+    if (a->phase != CH_RUNNING) return;
+    a->phase = CH_FUSE;
+    a->phase_t = 0;
+    a->cplaying = false;
+    a->ed->focused = false;
+    snprintf(a->boom_reason, sizeof a->boom_reason, "%s", reason);
+}
+
+/* Leaving the cube (another level or screen) abandons a running attempt.
+ * 큐브를 떠나면 (다른 레벨이나 화면) 진행 중인 도전은 포기한다. */
+static void challenge_abandon(ArraysScreen *a)
+{
+    if (a->phase != CH_DEFUSED && a->phase != CH_READY) challenge_reset(a);
+}
+
+static void challenge_tick(ArraysScreen *a, float dt, bool countdown)
+{
+    switch (a->phase) {
+    case CH_RUNNING:
+        if (!countdown) break;
+        a->time_left -= dt;
+        if (a->time_left <= 0) {
+            a->time_left = 0;
+            a->cplaying = false;
+            a->ed->focused = false;
+            a->phase = CH_EXPLODED;
+            a->phase_t = 0;
+            snprintf(a->boom_reason, sizeof a->boom_reason,
+                     "Time ran out before all five modules were defused.");
+        }
+        break;
+    case CH_FUSE:
+        a->phase_t += dt;
+        if (a->phase_t >= FUSE_SECONDS) {
+            a->phase = CH_EXPLODED;
+            a->phase_t = 0;
+        }
+        break;
+    case CH_EXPLODED: a->phase_t += dt; break;
+    default: break;
+    }
+}
+
+static const char *clock_text(float seconds)
+{
+    int s = (int)ceilf(seconds);
+    if (s < 0) s = 0;
+    return TextFormat("%02d:%02d", s / 60, s % 60);
+}
+
+static int modules_defused(const ArraysScreen *a)
+{
+    int n = 0;
+    for (int m = 0; m < CUBE_MODULE_COUNT; m++) n += a->module_done[m];
+    return n;
+}
+
+/* ========================================================================
  * Selection / 선택
  * ====================================================================== */
 
@@ -514,6 +664,7 @@ static void set_level(ArraysScreen *a, int level)
         if (level == a->level) return;
     }
     if (a->mode == MODE_CODE) code_save(a);
+    if (is_cube(a)) challenge_abandon(a);
     a->level = level;
     if (a->mode == MODE_CODE) {
         code_load(a);
@@ -560,9 +711,18 @@ static void build_scene(ArraysScreen *a)
         s->modules[0].solved = st->status == SOO_SUCCESS;
         snprintf(s->lcd_small, sizeof s->lcd_small, "%.23s", ij_text(st));
     }
-    snprintf(s->lcd, sizeof s->lcd, "%02d/%02d", st->operations,
-             st->level->budget);
-    snprintf(s->lcd_caption, sizeof s->lcd_caption, "OPS");
+    if (is_cube(a)) {
+        /* the countdown lives on the top display / 카운트다운은 윗면 표시창 */
+        snprintf(s->lcd, sizeof s->lcd, "%s", clock_text(a->time_left));
+        snprintf(s->lcd_caption, sizeof s->lcd_caption, "TIME");
+        s->lcd_alert = a->phase == CH_FUSE ||
+                       (a->phase == CH_RUNNING && a->time_left < ALERT_SECONDS);
+        s->exploded = a->phase == CH_EXPLODED;
+    } else {
+        snprintf(s->lcd, sizeof s->lcd, "%02d/%02d", st->operations,
+                 st->level->budget);
+        snprintf(s->lcd_caption, sizeof s->lcd_caption, "OPS");
+    }
     s->running = a->mode == MODE_CODE ? a->cplaying : a->playing;
 }
 
@@ -598,10 +758,13 @@ ArraysScreen *arrays_create(const EditorStyle *style)
     a->style = style;
     a->interval = SPEEDS[0];
     a->mode = MODE_CODE;
+    a->phase = CH_READY;
+    a->time_left = CUBE_TIME_LIMIT;
     ed_init(a->ed);
     code_load(a);
     a->ed->focused = true;
     Load(a);
+    build_scene(a);          /* never draw an empty scene / 빈 장면은 그리지 않음 */
     return a;
 }
 
@@ -625,6 +788,7 @@ bool arrays_typing(const ArraysScreen *a)
 
 void arrays_leave(ArraysScreen *a)
 {
+    if (is_cube(a)) challenge_abandon(a);
     a->playing = false;
     a->cplaying = false;
     a->ed->focused = false;
@@ -649,7 +813,13 @@ void arrays_update(ArraysScreen *a, float dt)
     Vector2 m = ui_mouse();
     bool in_bomb = CheckCollisionPointRec(m, LEFT);
 
-    if (a->mode == MODE_CODE) {
+    if (is_cube(a)) challenge_tick(a, dt, true);
+    if (a->mode == MODE_CODE && locked(a)) {
+        /* before START / after the blast: nothing to type or run
+           START 전 / 폭발 후: 입력하거나 실행할 것이 없다 */
+        while (GetCharPressed() > 0) {
+        }
+    } else if (a->mode == MODE_CODE) {
         editor_ui_update(a->ed, code_editor_rect(a), a->style);
         /* Turning or clicking the bomb keeps the editor focused, so typing
          * still goes into the code. Single-letter shortcuts are off in this
@@ -706,7 +876,8 @@ void arrays_update(ArraysScreen *a, float dt)
 
     build_scene(a);
     Vector2 local = { m.x - LEFT.x, m.y - LEFT.y };
-    int clicked = bomb_view_update(a->bomb, &a->scene, dt, local, in_bomb);
+    int clicked = bomb_view_update(a->bomb, &a->scene, dt, local,
+                                   in_bomb && !locked(a));
     if (clicked >= 0) {
         select_module(a, clicked);
         build_scene(a);
@@ -727,17 +898,26 @@ static void draw_top_row(ArraysScreen *a)
 {
     static const char *const modes[4] = { "Write code", "Predict", "Explore",
                                           "Find the bug" };
-    for (int n = 0; n < 4; n++) {
-        bool enabled = !(is_cube(a) && n != MODE_CODE);
-        if (ui_button((Rectangle){ 1162 + n * 182, ROW2_Y, 170, 52 }, modes[n],
-                      enabled, a->mode == (ArraysMode)n))
-            set_mode(a, (ArraysMode)n);
+    if (is_cube(a)) {
+        /* The cube is write-code only, so its row shows the rules instead.
+         * 큐브는 코드 작성만 있으므로 그 자리에 규칙을 보여 준다. */
+        DrawText("TIMED CHALLENGE", 1174, ROW2_Y + 6, FS_SMALL, UI_ERROR);
+        DrawText(TextFormat("%s  /  5 modules  /  a wrong run explodes",
+                            clock_text(CUBE_TIME_LIMIT)),
+                 1174, ROW2_Y + 30, FS_SMALL, UI_MUTED);
+    } else {
+        for (int n = 0; n < 4; n++)
+            if (ui_button((Rectangle){ 1162 + n * 182, ROW2_Y, 170, 52 },
+                          modes[n], true, a->mode == (ArraysMode)n))
+                set_mode(a, (ArraysMode)n);
     }
     for (int n = 0; n < LEVEL_TOTAL; n++) {
         Rectangle r = { 30 + n * 160, ROW2_Y, 150, 52 };
         const char *label = n == LEVEL_CUBE ? "Cube bomb"
                                             : TextFormat("Level %d", n + 1);
-        bool enabled = a->mode != MODE_BUG || n == 1;
+        /* The cube can always be opened; it switches to Write code.
+         * 큐브는 언제든 열 수 있다. Write code로 바뀐다. */
+        bool enabled = a->mode != MODE_BUG || n == 1 || n == LEVEL_CUBE;
         if (ui_button(r, label, enabled, a->level == n)) set_level(a, n);
         if (a->completed[n])
             DrawCircle((int)(r.x + r.width - 14), (int)(r.y + 14), 5,
@@ -757,8 +937,8 @@ static void draw_bomb_panel(ArraysScreen *a, const char *heading, Color hcol,
                             const char *message, const char *step)
 {
     Texture2D t = bomb_view_texture(a->bomb);
-    DrawTextureRec(t, (Rectangle){ 0, 0, (float)t.width, (float)-t.height },
-                   (Vector2){ LEFT.x, LEFT.y }, WHITE);
+    ui_draw_view(t, (Rectangle){ 0, 0, (float)t.width, (float)-t.height },
+                 (Rectangle){ LEFT.x, LEFT.y, (float)t.width, (float)t.height });
     DrawRectangleLinesEx(LEFT, 2.0f, UI_BORDER);
 
     const SooLevel *l = cur_level(a);
@@ -768,10 +948,18 @@ static void draw_bomb_panel(ArraysScreen *a, const char *heading, Color hcol,
     DrawText(title, (int)LEFT.x + 24, (int)LEFT.y + 18, FS_BODY, UI_INK);
     DrawText(l->concept, (int)LEFT.x + 24, (int)LEFT.y + 56, FS_SMALL,
              UI_ACCENT);
-    if (is_cube(a))
+    if (is_cube(a) && (a->phase == CH_RUNNING || a->phase == CH_FUSE)) {
+        bool alert = a->phase == CH_FUSE || a->time_left < ALERT_SECONDS;
+        ui_text_right(clock_text(a->time_left), (int)(LEFT.x + LEFT.width) - 24,
+                      (int)LEFT.y + 16, FS_TITLE, alert ? UI_ERROR : UI_INK);
+        ui_text_right("Drag to turn. Click a face to pick it.",
+                      (int)(LEFT.x + LEFT.width) - 24, (int)LEFT.y + 62,
+                      FS_SMALL, UI_MUTED);
+    } else if (is_cube(a) && a->phase == CH_DEFUSED) {
         ui_text_right("Drag to turn the bomb. Click a face to pick it.",
                       (int)(LEFT.x + LEFT.width) - 24, (int)LEFT.y + 24,
                       FS_SMALL, UI_MUTED);
+    }
 
     int y = (int)(LEFT.y + LEFT.height) - 96;
     DrawText(heading, (int)LEFT.x + 24, y, FS_SMALL, hcol);
@@ -779,6 +967,68 @@ static void draw_bomb_panel(ArraysScreen *a, const char *heading, Color hcol,
                             UI_MUTED);
     ui_wrapped(message, (int)LEFT.x + 24, y + 30, (int)LEFT.width - 48,
                FS_SMALL, hcol);
+}
+
+/* Start card, restart card and the defused banner on the bomb panel.
+ * 폭탄 패널 위의 시작 카드, 재시작 카드, 해체 알림. */
+static void draw_challenge_overlay(ArraysScreen *a)
+{
+    float cx = LEFT.x + LEFT.width / 2;
+    if (a->phase == CH_READY || (a->phase == CH_EXPLODED &&
+                                 a->phase_t >= RESTART_DELAY)) {
+        bool ready = a->phase == CH_READY;
+        if (ready)
+            DrawRectangle((int)LEFT.x + 2, (int)LEFT.y + 90,
+                          (int)LEFT.width - 4, (int)LEFT.height - 210,
+                          (Color){ 12, 8, 6, 130 });
+        Rectangle card = { cx - 330, LEFT.y + 230, 660, 400 };
+        DrawRectangleRounded((Rectangle){ card.x, card.y + 8, card.width,
+                                          card.height },
+                             0.08f, 8, (Color){ 10, 6, 20, 220 });
+        DrawRectangleRounded(card, 0.08f, 8, UI_PANEL);
+        DrawRectangleRoundedLinesEx(card, 0.08f, 8, 3.0f,
+                                    ready ? UI_ACCENT : UI_ERROR);
+        const char *title = ready ? "TIMED CHALLENGE" : "THE BOMB EXPLODED";
+        DrawText(title, (int)(cx - MeasureText(title, FS_TITLE) / 2),
+                 (int)card.y + 36, FS_TITLE, ready ? UI_ACCENT : UI_ERROR);
+        int y = (int)card.y + 100;
+        if (ready) {
+            y = ui_wrapped(TextFormat("Defuse all five modules before the clock "
+                                      "reaches 00:00. You have %s.",
+                                      clock_text(CUBE_TIME_LIMIT)),
+                           (int)card.x + 44, y, (int)card.width - 88, FS_SMALL,
+                           UI_INK) + 10;
+            ui_wrapped("A run that strikes, or ends with its module unsolved, "
+                       "sets the bomb off. Compile errors are safe.",
+                       (int)card.x + 44, y, (int)card.width - 88, FS_SMALL,
+                       UI_MUTED);
+        } else {
+            y = ui_wrapped(a->boom_reason, (int)card.x + 44, y,
+                           (int)card.width - 88, FS_SMALL, UI_INK) + 10;
+            DrawText(TextFormat("Modules defused: %d / %d", modules_defused(a),
+                                CUBE_MODULE_COUNT),
+                     (int)card.x + 44, y, FS_SMALL, UI_MUTED);
+            DrawText("Your code is kept. Fix it and go again.",
+                     (int)card.x + 44, y + 30, FS_SMALL, UI_MUTED);
+        }
+        Rectangle b = { cx - 160, card.y + card.height - 110, 320, 72 };
+        if (ui_button(b, ready ? "START" : "RESTART", true, true))
+            challenge_start(a);
+    } else if (a->phase == CH_DEFUSED) {
+        Rectangle card = { cx - 300, LEFT.y + LEFT.height - 330, 600, 190 };
+        DrawRectangleRounded(card, 0.1f, 8, (Color){ 20, 40, 34, 235 });
+        DrawRectangleRoundedLinesEx(card, 0.1f, 8, 3.0f, UI_SUCCESS);
+        const char *t = "BOMB DEFUSED";
+        DrawText(t, (int)(cx - MeasureText(t, FS_TITLE) / 2), (int)card.y + 24,
+                 FS_TITLE, UI_SUCCESS);
+        const char *left = TextFormat("with %s left on the clock",
+                                      clock_text(a->time_left));
+        DrawText(left, (int)(cx - MeasureText(left, FS_SMALL) / 2),
+                 (int)card.y + 76, FS_SMALL, UI_INK);
+        if (ui_button((Rectangle){ cx - 120, card.y + 116, 240, 52 },
+                      "Play again", true, false))
+            challenge_start(a);
+    }
 }
 
 static void draw_code_mode(ArraysScreen *a)
@@ -813,10 +1063,21 @@ static void draw_code_mode(ArraysScreen *a)
                                "and write plays out on the bomb, one step at a "
                                "time.";
     }
+    if (is_cube(a) && a->phase == CH_READY) {
+        heading = "READ THE MISSIONS";
+        hcol = UI_INK;
+        message = "Click the module buttons on the right to read each mission. "
+                  "The clock starts when you press START.";
+    } else if (is_cube(a) && (a->phase == CH_FUSE || a->phase == CH_EXPLODED)) {
+        heading = "BOOM";
+        hcol = UI_ERROR;
+        message = a->boom_reason;
+    }
     char step[32] = "";
     if (code_fresh(a))
         snprintf(step, sizeof step, "Step %d / %d", a->ccursor, code_length(a));
     draw_bomb_panel(a, heading, hcol, message, step[0] ? step : NULL);
+    if (is_cube(a)) draw_challenge_overlay(a);
 
     ui_panel(RIGHT);
     if (is_cube(a)) {
@@ -836,6 +1097,15 @@ static void draw_code_mode(ArraysScreen *a)
     array_tools_text(cur_level(a), tools, sizeof tools);
     DrawText(TextFormat("You can use   %s", tools), RX, y, FS_SMALL, UI_MUTED);
     editor_ui_draw(a->ed, code_editor_rect(a), a->style);
+    if (locked(a)) {
+        Rectangle er = code_editor_rect(a);
+        DrawRectangleRec(er, (Color){ 22, 17, 40, 200 });
+        const char *t = a->phase == CH_READY
+                            ? "Press START on the bomb to begin"
+                            : "Press RESTART on the bomb to try again";
+        DrawText(t, (int)(er.x + (er.width - MeasureText(t, FS_SMALL)) / 2),
+                 (int)(er.y + er.height / 2 - 10), FS_SMALL, UI_INK);
+    }
 
     DrawText("SPEED", 52, ROW_Y + 18, FS_SMALL, UI_MUTED);
     for (int n = 0; n < 3; n++)
@@ -846,10 +1116,10 @@ static void draw_code_mode(ArraysScreen *a)
         }
 
     float bw = (RIGHT.width - 3 * 14) / 4;
-    bool can_step = !code_fresh(a) || !code_done(a);
+    bool can_step = (!code_fresh(a) || !code_done(a)) && !locked(a);
     bool control = false;
     if (ui_button((Rectangle){ RIGHT.x, ROW_Y, bw, ROW_H },
-                  a->cplaying ? "Pause" : "Run", true, a->cplaying)) {
+                  a->cplaying ? "Pause" : "Run", !locked(a), a->cplaying)) {
         code_run(a);
         control = true;
     }
@@ -859,12 +1129,13 @@ static void draw_code_mode(ArraysScreen *a)
         control = true;
     }
     if (ui_button((Rectangle){ RIGHT.x + 2 * (bw + 14), ROW_Y, bw, ROW_H },
-                  "Back", code_fresh(a) && a->ccursor > 0, false)) {
+                  "Back", code_fresh(a) && a->ccursor > 0 && !locked(a),
+                  false)) {
         code_back(a);
         control = true;
     }
     if (ui_button((Rectangle){ RIGHT.x + 3 * (bw + 14), ROW_Y, bw, ROW_H },
-                  "Reset", true, false)) {
+                  "Reset", !locked(a), false)) {
         code_reset(a);
         control = true;
     }
@@ -963,9 +1234,30 @@ void arrays_qa(ArraysScreen *a, const char *mode, int level, int steps,
     if (m != MODE_BUG) set_level(a, level);
 
     if (m == MODE_CODE && is_cube(a)) {
-        /* variant 20+: solve modules 0..(variant-21) first; 10+k: module k
-           variant 20 이상: 앞의 모듈을 먼저 푼다; 10+k: k번 모듈 */
-        if (variant >= 20) {
+        /* variant 0, no steps: READY (START card). Otherwise the challenge is
+         * running with 6:52 left. 40/41/42: exploded (0.35 s, 1.5 s, with
+         * the RESTART card). 43: 0:24 left, display blinking.
+         * variant 20+: solve modules 0..(variant-21) first; 10+k: module k
+         * variant 0이고 단계 없음: READY (START 카드). 그 밖에는 6:52가 남은
+         * 도전 진행 중. 40/41/42: 폭발 (0.35초, 1.5초, RESTART 카드).
+         * 43: 0:24 남음, 표시창 깜박임. 20 이상: 앞 모듈을 먼저 푼다. */
+        challenge_reset(a);
+        if (variant != 0 || steps > 0) {
+            a->phase = CH_RUNNING;
+            a->time_left = variant == 43 ? 24.0f : 412.0f;
+        }
+        if (variant >= 40 && variant <= 42) {
+            select_module(a, 2);
+            a->phase = CH_EXPLODED;
+            a->phase_t = variant == 42 ? RESTART_DELAY : 0;
+            a->qa_settle = variant == 40 ? 0.35f : 0;
+            snprintf(a->boom_reason, sizeof a->boom_reason,
+                     "Module 3 (Mirror): Out of bounds: cards[6] does not "
+                     "exist.");
+            build_scene(a);
+            return;
+        }
+        if (variant >= 20 && variant < 40) {
             int solved = variant - 20;
             for (int k = 0; k < solved && k < CUBE_MODULE_COUNT; k++) {
                 select_module(a, k);
@@ -973,7 +1265,7 @@ void arrays_qa(ArraysScreen *a, const char *mode, int level, int steps,
                 code_save(a);
             }
             select_module(a, solved < CUBE_MODULE_COUNT ? solved : 0);
-        } else if (variant >= 10) {
+        } else if (variant >= 10 && variant < 20) {
             select_module(a, variant - 10);
         }
         if (steps > 0) qa_play(a, cube_example_solution(a->module), steps);
@@ -1017,15 +1309,111 @@ void arrays_qa(ArraysScreen *a, const char *mode, int level, int steps,
 void arrays_qa_settle(ArraysScreen *a, float seconds)
 {
     Vector2 off = { -10000, -10000 };
+    if (a->qa_settle > 0) seconds = a->qa_settle;
     for (float t = 0; t < seconds; t += 1.0f / 60.0f) {
+        if (is_cube(a)) challenge_tick(a, 1.0f / 60.0f, false);
         build_scene(a);
         bomb_view_update(a->bomb, &a->scene, 1.0f / 60.0f, off, false);
     }
 }
 
+/* Type src, press Run and let playback finish, as a player would.
+ * 플레이어처럼 src를 입력하고 Run을 눌러 재생이 끝날 때까지 둔다. */
+static void st_run(ArraysScreen *a, const char *src)
+{
+    ed_set_text(a->ed, src, true);
+    code_watch_edits(a);
+    code_run(a);
+    for (int k = 0; k < 2000 && a->cplaying; k++) code_step(a);
+}
+
+static int st_check(bool ok, const char *what)
+{
+    printf("  %s %s\n", what, ok ? "ok" : "FAILED");
+    return ok ? 0 : 1;
+}
+
 int arrays_self_test(ArraysScreen *a)
 {
+    int failures = 0;
+    puts("Cube bomb challenge rules:");
+    set_mode(a, MODE_BUG);
     set_level(a, LEVEL_CUBE);
+    failures += st_check(is_cube(a) && a->mode == MODE_CODE,
+                         "Cube bomb tab works from Find the bug:");
+
+    challenge_reset(a);
+    st_run(a, cube_example_solution(a->module));
+    failures += st_check(a->phase == CH_READY && !a->have_trace,
+                         "Run is locked before START:");
+
+    challenge_start(a);
+    st_run(a, "void run(void) {\n    cards[0] = \n}\n");
+    failures += st_check(a->phase == CH_RUNNING,
+                         "a compile error does not explode:");
+
+    st_run(a, "void run(void) {\n}\n");
+    failures += st_check(a->phase == CH_FUSE, "an unsolved run lights the fuse:");
+    challenge_tick(a, 1.0f, true);
+    failures += st_check(a->phase == CH_EXPLODED, "...and then explodes:");
+
+    challenge_start(a);
+    st_run(a, "void run(void) {\n    cards[N] = 1;\n}\n");
+    failures += st_check(a->phase == CH_FUSE, "an out-of-bounds strike explodes:");
+
+    challenge_start(a);
+    challenge_tick(a, CUBE_TIME_LIMIT - 1.0f, true);
+    failures += st_check(a->phase == CH_RUNNING, "clock still running at 00:01:");
+    challenge_tick(a, 2.0f, true);
+    failures += st_check(a->phase == CH_EXPLODED, "time running out explodes:");
+
+    challenge_start(a);
+    for (int m = 0; m < CUBE_MODULE_COUNT; m++) {
+        select_module(a, m);
+        st_run(a, cube_example_solution(m));
+    }
+    failures += st_check(a->phase == CH_DEFUSED && modules_defused(a) == 5,
+                         "solving all five modules defuses the bomb:");
+
+    challenge_start(a);
+    set_level(a, 0);
+    set_level(a, LEVEL_CUBE);
+    failures += st_check(a->phase == CH_READY && a->time_left == CUBE_TIME_LIMIT,
+                         "leaving the cube abandons the attempt:");
+
+    puts("Cube bomb click picking:");
+    challenge_reset(a);
     build_scene(a);
-    return bomb_view_self_test(a->bomb, &a->scene);
+    return failures + bomb_view_self_test(a->bomb, &a->scene);
+}
+
+/* Open a bomb from the mission map: 0-5 = bombs 1-6, 6 = cube.
+ * 미션 지도에서 폭탄을 연다: 0-5 = 폭탄 1-6, 6 = 큐브. */
+void arrays_open(ArraysScreen *a, int level, bool find_the_bug)
+{
+    if (find_the_bug) {
+        set_mode(a, MODE_BUG);
+        return;
+    }
+    if (a->mode != MODE_CODE) set_mode(a, MODE_CODE);
+    set_level(a, level);
+    a->ed->focused = true;
+}
+
+void arrays_tick(ArraysScreen *a, float dt)
+{
+    if (is_cube(a)) challenge_tick(a, dt, true);
+    /* Keep the scene current (the 3D view is still drawn under the pop-up,
+     * even on the first visit) and let animations such as the explosion
+     * play, with no mouse input.
+     * 장면을 최신으로 유지하고 (처음 들어왔을 때도 팝업 아래에서 3D 화면은
+     * 그려진다) 폭발 같은 애니메이션을 마우스 입력 없이 재생한다. */
+    build_scene(a);
+    bomb_view_update(a->bomb, &a->scene, dt, (Vector2){ -10000, -10000 },
+                     false);
+}
+
+void arrays_defused(const ArraysScreen *a, bool out[7])
+{
+    for (int n = 0; n < LEVEL_TOTAL && n < 7; n++) out[n] = a->completed[n];
 }

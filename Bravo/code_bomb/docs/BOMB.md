@@ -2,7 +2,7 @@
 
 ## English
 
-The left panel of the Arrays screen is a 3D scene: a bomb on a wooden table.
+The left panel of the Bomb screen is a 3D scene: a bomb on a wooden table.
 It is drawn by `src/bomb3d.c` from the game state the screen passes in; all
 rules still come from Sumin's engine.
 
@@ -37,6 +37,28 @@ fail (for example Sumin's fault-repair sweep does not solve Invert).
 - Each module keeps its own code. Solved modules stay solved and their light
   turns green. When all five are green the display shows DEFUSED.
 
+### The timed challenge
+
+Levels 1-6 are untimed practice. The Cube bomb is the challenge:
+
+1. **Ready:** the editor and Run are locked. The player can read all five
+   missions (module buttons on the right), then presses **START** on the
+   bomb panel.
+2. **Running:** a 10:00 countdown runs on the cube's top display (and large
+   in the panel's corner). Under 30 seconds the display blinks.
+3. **Boom:** any run that ends in a strike, or ends with its module
+   unsolved, sets the bomb off after a short pause on the strike, and so
+   does the clock reaching 00:00. Compile errors never do: nothing ran.
+4. **Restart:** when the explosion has played, a card shows why it exploded
+   and a **RESTART** button. Restart re-arms all five modules and starts the
+   clock again. The player's code is kept.
+5. **Defused:** solving all five modules stops the clock and shows the time
+   left, with **Play again**.
+
+Leaving the cube (another level or screen) abandons a running attempt.
+Predict, Explore and Find the bug are hidden on the cube, and the Cube bomb
+button works from any mode.
+
 ### Effects
 
 - The card being read or written lifts and gets a glowing frame.
@@ -44,6 +66,11 @@ fail (for example Sumin's fault-repair sweep does not solve Invert).
 - A failure (out of bounds, over budget, wrong result) is a strike: the bomb
   shakes, the screen flashes red and the status light turns red.
 - Success turns the lights green with a soft green flash.
+- The explosion: a white flash, an expanding fireball and shock ring, fire
+  and smoke particles, pieces of the casing that fly and bounce on the table,
+  then a scorch mark with burnt wreckage. The view is copied without blending
+  (`ui_draw_view`), so translucent flashes and smoke don't let the
+  background show through.
 
 ### Camera
 
@@ -52,6 +79,17 @@ corner of the bomb stays inside the free area of the panel (between the title
 at the top and the log at the bottom), then centres the bomb there. Wide
 levels are limited by width, tall ones by height, so the bomb always fills
 the panel.
+
+### No flicker (z-fighting)
+
+Two surfaces at the same depth flicker as the camera moves, because the
+depth buffer can't decide which is in front. The dark grey recess under the
+cards used to sit at exactly the same height as the cube's face plate. Now
+every face is a stack of layers, each `LAYER` (0.03) above the one below:
+face plate, then recess, then the selection frame and the cards. The 3D view
+also sets the camera's near clip plane to 1.0 instead of raylib's default
+(0.01 in 5.5, 0.05 in 6.0), which gives the depth buffer far more precision
+at the camera's distance; the old planes are restored afterwards.
 
 ### Readability rules kept from Sumin's design
 
@@ -62,15 +100,18 @@ text, which keeps the other faces uncluttered.
 
 ### Checking it
 
-- `make test`: 180 checks, including all cube modules.
-- `./build/codebomb --selftest`: turns the cube to each module and checks
-  that clicking the centre of the face picks that module.
+- `make test`: 237 checks, including all cube modules.
+- `./build/codebomb --selftest`: checks the challenge rules above, then
+  turns the cube to each module and checks that clicking the centre of the
+  face picks that module.
+- `--shot boom.png arrays code 7 0 40` (explosion), `... 0 42` (restart
+  card), `... 0 43` (last 24 seconds), `... 0 0` (START card).
 - `./build/codebomb --shot out.png arrays code 7 6 22`: a screenshot of the
   cube with two modules solved (see `src/main.c` for the options).
 
 ## 한국어
 
-배열 화면의 왼쪽 패널은 3D 장면입니다: 나무 탁자 위의 폭탄. `src/bomb3d.c`가
+Bomb 화면의 왼쪽 패널은 3D 장면입니다: 나무 탁자 위의 폭탄. `src/bomb3d.c`가
 화면이 넘겨준 게임 상태를 그대로 그리며, 모든 규칙은 여전히 수민의 엔진에서
 나옵니다.
 
@@ -105,6 +146,27 @@ text, which keeps the other faces uncluttered.
 - 모듈마다 코드가 따로 저장됩니다. 푼 모듈은 풀린 채로 남고 불빛이 초록색이
   됩니다. 다섯 개가 모두 초록색이면 표시창에 DEFUSED가 나옵니다.
 
+### 시간 제한 도전
+
+레벨 1-6은 시간 제한 없는 연습입니다. 큐브 폭탄은 도전입니다:
+
+1. **준비:** 에디터와 Run이 잠깁니다. 오른쪽 모듈 버튼으로 다섯 미션을 모두
+   읽은 뒤 폭탄 패널의 **START**를 누릅니다.
+2. **진행:** 큐브 윗면 표시창(그리고 패널 모서리에 크게)에서 10:00
+   카운트다운이 진행됩니다. 30초 미만이면 표시창이 깜박입니다.
+3. **폭발:** 스트라이크로 끝나거나 모듈을 풀지 못한 채 끝난 실행은 스트라이크를
+   잠깐 보여 준 뒤 폭탄을 터뜨립니다. 시계가 00:00에 닿아도 터집니다.
+   컴파일 오류는 아무것도 실행되지 않았으므로 터지지 않습니다.
+4. **재시작:** 폭발이 끝나면 터진 이유와 **RESTART** 버튼이 있는 카드가
+   나옵니다. 재시작하면 다섯 모듈이 다시 무장되고 시계가 다시 갑니다.
+   플레이어의 코드는 그대로 남습니다.
+5. **해체:** 다섯 모듈을 모두 풀면 시계가 멈추고 남은 시간과 **Play again**이
+   나옵니다.
+
+큐브를 떠나면 (다른 레벨이나 화면) 진행 중인 도전은 포기됩니다. 큐브에서는
+Predict, Explore, Find the bug을 숨기고, Cube bomb 버튼은 어느 모드에서나
+동작합니다.
+
 ### 효과
 
 - 읽거나 쓰는 카드는 올라오고 빛나는 테두리가 생깁니다.
@@ -112,6 +174,9 @@ text, which keeps the other faces uncluttered.
 - 실패(범위 밖, 예산 초과, 잘못된 결과)는 스트라이크입니다: 폭탄이 흔들리고
   화면이 붉게 번쩍이며 상태 불빛이 빨간색이 됩니다.
 - 성공하면 불빛이 초록색이 되고 화면이 부드럽게 초록색으로 빛납니다.
+- 폭발: 하얀 섬광, 커지는 불덩이와 충격파 고리, 불과 연기 입자, 날아가 탁자에서
+  튀는 몸체 조각, 그 뒤 그을음 자국과 탄 잔해. 화면은 섞지 않고 복사하므로
+  (`ui_draw_view`) 반투명 섬광과 연기 사이로 배경이 비치지 않습니다.
 
 ### 카메라
 
@@ -119,6 +184,15 @@ text, which keeps the other faces uncluttered.
 아래쪽 기록 사이) 안에 들어오는 가장 가까운 위치로 움직인 뒤, 폭탄을 그 영역
 가운데에 놓습니다. 넓은 레벨은 너비, 높은 레벨은 높이에 맞춰지므로 폭탄이 항상
 패널을 채웁니다.
+
+### 깜빡임 없음 (z-fighting)
+
+같은 깊이에 있는 두 면은 깊이 버퍼가 어느 쪽이 앞인지 정하지 못해 카메라가
+움직일 때 깜빡입니다. 카드 아래의 짙은 회색 홈이 큐브 면 판과 정확히 같은
+높이에 있었습니다. 이제 각 면은 층으로 쌓이며, 층마다 `LAYER`(0.03)만큼
+높습니다: 면 판, 홈, 그리고 선택 테두리와 카드. 3D 화면은 카메라의 근거리 클립
+평면도 raylib 기본값(5.5는 0.01, 6.0은 0.05) 대신 1.0으로 설정하여 카메라 거리에서
+깊이 정밀도를 크게 높이고, 그린 뒤에는 원래 값으로 되돌립니다.
 
 ### 수민의 설계에서 지킨 가독성 규칙
 
@@ -129,8 +203,10 @@ text, which keeps the other faces uncluttered.
 
 ### 확인 방법
 
-- `make test`: 큐브 모듈을 포함한 180개 검사.
-- `./build/codebomb --selftest`: 큐브를 모듈마다 돌리고, 면 중심을 클릭하면 그
-  모듈이 골라지는지 확인합니다.
+- `make test`: 큐브 모듈을 포함한 237개 검사.
+- `./build/codebomb --selftest`: 위의 도전 규칙을 검사한 뒤, 큐브를 모듈마다
+  돌리고 면 중심을 클릭하면 그 모듈이 골라지는지 확인합니다.
+- `--shot boom.png arrays code 7 0 40` (폭발), `... 0 42` (재시작 카드),
+  `... 0 43` (마지막 24초), `... 0 0` (START 카드).
 - `./build/codebomb --shot out.png arrays code 7 6 22`: 모듈 두 개를 푼 큐브의
   스크린샷 (옵션은 `src/main.c` 참고).

@@ -17,6 +17,8 @@ int main(void)
     run_editor_tests();
     printf("== Array bridge (editor + Sumin's engine) ==\n");
     run_bridge_tests();
+    printf("== Mailroom levels ==\n");
+    run_level_tests();
 
     printf("\n%d/%d checks passed\n", g_checks - g_failures, g_checks);
     return g_failures ? 1 : 0;

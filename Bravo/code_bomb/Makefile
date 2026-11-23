@@ -39,11 +39,12 @@ CORE_SRC := $(addprefix src/, vm.c levels.c programs.c lexer.c parser.c \
             $(SOO_DIR)/array_core_SOO.c
 # Game: raylib screens / 게임: raylib 화면
 GAME_SRC := $(addprefix src/, main.c ui.c editor_ui.c scene_mailroom.c \
-            screen_mailroom.c screen_arrays.c screen_pointers.c \
-            bomb3d.c) \
-            $(SOO_DIR)/pointer_SOO.c
+            screen_mailroom.c screen_arrays.c screen_missions.c \
+            soo_lessons.c help.c bomb3d.c) \
+            $(addprefix $(SOO_DIR)/, pointer_SOO.c stage6_SOO.c stage7_SOO.c \
+            stage8_SOO.c)
 TEST_SRC := $(addprefix tests/, test_main.c test_vm.c test_compiler.c \
-            test_editor.c test_bridge.c)
+            test_editor.c test_bridge.c test_levels.c)
 
 # Objects go in build/; Sumin's files in build/soo/.
 # 오브젝트는 build/에, 수민의 파일은 build/soo/에 만든다.

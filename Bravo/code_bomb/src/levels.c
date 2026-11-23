@@ -195,7 +195,13 @@ const LevelDef LEVEL_MAILROOM = {
              "the same order, to the OUTBOX belt. take() picks up the next "
              "parcel and gives back its number; put(n) places a parcel "
              "stamped n on the outbox. Every statement ends with ;",
+    .goal = "Deliver every parcel from the INBOX to the OUTBOX, in order.",
     .tools = "int take(void);   void put(int n);",
+    .reference = "void run(void) {\n"
+                 "    put(take());\n"
+                 "    put(take());\n"
+                 "    put(take());\n"
+                 "}\n",
     .starter = "// Deliver every parcel from the INBOX to the OUTBOX.\n"
                "void run(void) {\n"
                "    \n"
@@ -205,4 +211,386 @@ const LevelDef LEVEL_MAILROOM = {
     .solve = mailroom_solve,
     .par_size = 3,
     .par_speed = 7,
+};
+
+/* ========================================================================
+ * Levels 2-9 share take(), put(n) and has_input(); only the parcels and
+ * the rule for the outbox change.
+ * 레벨 2-9는 take(), put(n), has_input()을 함께 쓰고, 소포와 출력함 규칙만
+ * 다르다.
+ * ====================================================================== */
+
+#define TOOLS_LOOP "int take(void);   void put(int n);   int has_input(void);"
+
+static unsigned level_seed(unsigned seed, unsigned salt)
+{
+    return seed * 2654435761u + salt;
+}
+
+/* ---- Level 2: Night Shift - while loops / 레벨 2: 야간 근무 - while ---- */
+
+static void night_generate(LevelRun *run, unsigned seed)
+{
+    unsigned s = level_seed(seed, 4111u);
+    run->inbox_len = 2 + (int)(rng_next(&s) % 6);          /* 2-7 parcels */
+    if (seed == 0) run->inbox_len = 5;      /* on screen: not 3 / 화면: 3 아님 */
+    for (int i = 0; i < run->inbox_len; ++i)
+        run->inbox[i] = (int32_t)(1 + rng_next(&s) % 99);
+}
+
+static const LevelExample NIGHT_EXAMPLES[] = {
+    { "Three again", "Level 1's answer: only works for exactly 3 parcels",
+      "void run(void) {\n"
+      "    put(take());\n"
+      "    put(take());\n"
+      "    put(take());\n"
+      "}\n" },
+    { "Forever", "Bug: while (1) never stops, so take() runs dry",
+      "void run(void) {\n"
+      "    while (1) {\n"
+      "        put(take());\n"
+      "    }\n"
+      "}\n" },
+};
+
+const LevelDef LEVEL_NIGHT_SHIFT = {
+    .number = 2,
+    .title = "Night Shift",
+    .concept = "while loops",
+    .brief = "Tonight nobody knows how many parcels will arrive: it could "
+             "be two, it could be seven. Deliver all of them, in order. "
+             "has_input() tells you whether any parcels are left.",
+    .goal = "Deliver every parcel, however many arrive tonight.",
+    .tools = TOOLS_LOOP,
+    .starter = "// Deliver every parcel, however many there are.\n"
+               "void run(void) {\n"
+               "    \n"
+               "}\n",
+    .examples = NIGHT_EXAMPLES,
+    .example_count = 2,
+    .reference = "void run(void) {\n"
+                 "    while (has_input()) {\n"
+                 "        put(take());\n"
+                 "    }\n"
+                 "}\n",
+    .register_natives = mailroom_natives,
+    .generate = night_generate,
+    .solve = mailroom_solve,
+    .par_size = 2,
+    .par_speed = 28,
+};
+
+/* ---- Level 4: Weigh Station - variables / 레벨 4: 계량소 - 변수 ------- */
+
+static void weigh_generate(LevelRun *run, unsigned seed)
+{
+    unsigned s = level_seed(seed, 8209u);
+    int pairs = 1 + (int)(rng_next(&s) % 3);               /* 1-3 pairs  */
+    if (seed == 0) pairs = 3;
+    run->inbox_len = pairs * 2;
+    for (int i = 0; i < run->inbox_len; ++i)
+        run->inbox[i] = (int32_t)(1 + rng_next(&s) % 50);
+}
+
+static void weigh_solve(LevelRun *run)
+{
+    run->expected_len = run->inbox_len / 2;
+    for (int i = 0; i < run->expected_len; ++i)
+        run->expected[i] = run->inbox[2 * i] + run->inbox[2 * i + 1];
+}
+
+static const LevelExample WEIGH_EXAMPLES[] = {
+    { "Running total", "Bug: total is never set back to 0 for the next pair",
+      "void run(void) {\n"
+      "    int total = 0;\n"
+      "    while (has_input()) {\n"
+      "        total = total + take() + take();\n"
+      "        put(total);\n"
+      "    }\n"
+      "}\n" },
+    { "One take", "Bug: adds the same parcel to itself",
+      "void run(void) {\n"
+      "    while (has_input()) {\n"
+      "        int a = take();\n"
+      "        put(a + a);\n"
+      "    }\n"
+      "}\n" },
+};
+
+const LevelDef LEVEL_WEIGH_STATION = {
+    .number = 4,
+    .title = "Weigh Station",
+    .concept = "Variables & arithmetic",
+    .brief = "Parcels arrive in pairs. For each pair, deliver one new parcel "
+             "stamped with the sum of the two. The robot can only hold one "
+             "parcel, but your variables can remember numbers.",
+    .goal = "Parcels come in pairs. Deliver one parcel with each pair's sum.",
+    .tools = TOOLS_LOOP,
+    .starter = "// For each pair of parcels, deliver their sum.\n"
+               "void run(void) {\n"
+               "    \n"
+               "}\n",
+    .examples = WEIGH_EXAMPLES,
+    .example_count = 2,
+    .reference = "void run(void) {\n"
+                 "    while (has_input()) {\n"
+                 "        int a = take();\n"
+                 "        int b = take();\n"
+                 "        put(a + b);\n"
+                 "    }\n"
+                 "}\n",
+    .register_natives = mailroom_natives,
+    .generate = weigh_generate,
+    .solve = weigh_solve,
+    .par_size = 4,
+    .par_speed = 23,
+};
+
+/* ---- Level 6: Head Count - counters / 레벨 6: 인원 확인 - 카운터 ------ */
+
+static void count_generate(LevelRun *run, unsigned seed)
+{
+    unsigned s = level_seed(seed, 15013u);
+    int groups = 2 + (int)(rng_next(&s) % 2);              /* 2-3 groups */
+    int n = 0;
+    for (int g = 0; g < groups; ++g) {
+        int size = (int)(rng_next(&s) % 3);                /* 0-2 parcels */
+        if (seed == 0) size = g == 0 ? 2 : g == 1 ? 0 : 1;
+        for (int k = 0; k < size; ++k)
+            run->inbox[n++] = (int32_t)(1 + rng_next(&s) % 99);
+        run->inbox[n++] = 0;                               /* end marker */
+    }
+    run->inbox_len = n;
+}
+
+static void count_solve(LevelRun *run)
+{
+    int count = 0;
+    run->expected_len = 0;
+    for (int i = 0; i < run->inbox_len; ++i) {
+        if (run->inbox[i] != 0) {
+            count++;
+            continue;
+        }
+        run->expected[run->expected_len++] = count;
+        count = 0;
+    }
+}
+
+static const LevelExample COUNT_EXAMPLES[] = {
+    { "Counts the zero", "Bug: the 0 end marker is counted as a parcel",
+      "void run(void) {\n"
+      "    while (has_input()) {\n"
+      "        int count = 0;\n"
+      "        int box = 1;\n"
+      "        while (box != 0) {\n"
+      "            box = take();\n"
+      "            count++;\n"
+      "        }\n"
+      "        put(count);\n"
+      "    }\n"
+      "}\n" },
+    { "Never resets", "Bug: count starts at 0 only once, not per group",
+      "void run(void) {\n"
+      "    int count = 0;\n"
+      "    while (has_input()) {\n"
+      "        while (take() != 0)\n"
+      "            count++;\n"
+      "        put(count);\n"
+      "    }\n"
+      "}\n" },
+};
+
+const LevelDef LEVEL_HEAD_COUNT = {
+    .number = 6,
+    .title = "Head Count",
+    .concept = "Counters & sentinel loops",
+    .brief = "Parcels arrive in groups, and every group ends with a parcel "
+             "stamped 0. For each group, deliver how many parcels it had. "
+             "The 0 is only a marker: don't count it. A group can be empty.",
+    .goal = "Count the parcels before each 0, then deliver the count.",
+    .tools = TOOLS_LOOP,
+    .starter = "// Count the parcels before each 0 and deliver the count.\n"
+               "void run(void) {\n"
+               "    \n"
+               "}\n",
+    .examples = COUNT_EXAMPLES,
+    .example_count = 2,
+    .reference = "void run(void) {\n"
+                 "    while (has_input()) {\n"
+                 "        int count = 0;\n"
+                 "        while (take() != 0) {\n"
+                 "            count++;\n"
+                 "        }\n"
+                 "        put(count);\n"
+                 "    }\n"
+                 "}\n",
+    .register_natives = mailroom_natives,
+    .generate = count_generate,
+    .solve = count_solve,
+    .par_size = 5,
+    .par_speed = 59,
+};
+
+/* ---- Level 7: Biggest Box - if / 레벨 7: 가장 큰 상자 - if ------------ */
+
+static void biggest_generate(LevelRun *run, unsigned seed)
+{
+    unsigned s = level_seed(seed, 20011u);
+    int groups = 1 + (int)(rng_next(&s) % 3);              /* 1-3 groups */
+    if (seed == 0) groups = 2;
+    run->inbox_len = groups * 3;
+    for (int i = 0; i < run->inbox_len; ++i)
+        run->inbox[i] = (int32_t)(1 + rng_next(&s) % 99);
+}
+
+static void biggest_solve(LevelRun *run)
+{
+    run->expected_len = run->inbox_len / 3;
+    for (int g = 0; g < run->expected_len; ++g) {
+        int32_t best = run->inbox[3 * g];
+        for (int k = 1; k < 3; ++k)
+            if (run->inbox[3 * g + k] > best) best = run->inbox[3 * g + k];
+        run->expected[g] = best;
+    }
+}
+
+static const LevelExample BIGGEST_EXAMPLES[] = {
+    { "First wins", "Bug: delivers the first parcel without comparing",
+      "void run(void) {\n"
+      "    while (has_input()) {\n"
+      "        int best = take();\n"
+      "        take();\n"
+      "        take();\n"
+      "        put(best);\n"
+      "    }\n"
+      "}\n" },
+    { "Best never resets", "Bug: a big parcel from an earlier group wins",
+      "void run(void) {\n"
+      "    int best = 0;\n"
+      "    while (has_input()) {\n"
+      "        for (int i = 0; i < 3; i++) {\n"
+      "            int box = take();\n"
+      "            if (box > best)\n"
+      "                best = box;\n"
+      "        }\n"
+      "        put(best);\n"
+      "    }\n"
+      "}\n" },
+};
+
+const LevelDef LEVEL_BIGGEST_BOX = {
+    .number = 7,
+    .title = "Biggest Box",
+    .concept = "if & comparison",
+    .brief = "Parcels arrive in groups of three. For each group, deliver "
+             "the parcel with the biggest number. Two parcels can be equal.",
+    .goal = "Parcels come in groups of 3. Deliver the biggest of each group.",
+    .tools = TOOLS_LOOP,
+    .starter = "// For each group of 3 parcels, deliver the biggest.\n"
+               "void run(void) {\n"
+               "    \n"
+               "}\n",
+    .examples = BIGGEST_EXAMPLES,
+    .example_count = 2,
+    .reference = "void run(void) {\n"
+                 "    while (has_input()) {\n"
+                 "        int best = take();\n"
+                 "        for (int i = 0; i < 2; i++) {\n"
+                 "            int box = take();\n"
+                 "            if (box > best)\n"
+                 "                best = box;\n"
+                 "        }\n"
+                 "        put(best);\n"
+                 "    }\n"
+                 "}\n",
+    .register_natives = mailroom_natives,
+    .generate = biggest_generate,
+    .solve = biggest_solve,
+    .par_size = 7,
+    .par_speed = 92,
+};
+
+/* ---- Level 9: Countdown - for loops / 레벨 9: 카운트다운 - for -------- */
+
+static void countdown_generate(LevelRun *run, unsigned seed)
+{
+    unsigned s = level_seed(seed, 30011u);
+    run->inbox_len = 1 + (int)(rng_next(&s) % 2);          /* 1-2 parcels */
+    if (seed == 0) run->inbox_len = 2;
+    for (int i = 0; i < run->inbox_len; ++i)
+        run->inbox[i] = (int32_t)(1 + rng_next(&s) % 4);   /* 1-4 */
+    if (seed == 0) {
+        run->inbox[0] = 3;
+        run->inbox[1] = 2;
+    }
+}
+
+static void countdown_solve(LevelRun *run)
+{
+    run->expected_len = 0;
+    for (int i = 0; i < run->inbox_len; ++i)
+        for (int32_t v = run->inbox[i]; v > 0; --v)
+            run->expected[run->expected_len++] = v;
+}
+
+static const LevelExample COUNTDOWN_EXAMPLES[] = {
+    { "Off by one", "Bug: i >= 0 also delivers a parcel stamped 0",
+      "void run(void) {\n"
+      "    while (has_input()) {\n"
+      "        int n = take();\n"
+      "        for (int i = n; i >= 0; i--)\n"
+      "            put(i);\n"
+      "    }\n"
+      "}\n" },
+    { "Counts up", "Bug: delivers 1, 2, 3 instead of 3, 2, 1",
+      "void run(void) {\n"
+      "    while (has_input()) {\n"
+      "        int n = take();\n"
+      "        for (int i = 1; i <= n; i++)\n"
+      "            put(i);\n"
+      "    }\n"
+      "}\n" },
+};
+
+const LevelDef LEVEL_COUNTDOWN = {
+    .number = 9,
+    .title = "Countdown",
+    .concept = "for loops",
+    .brief = "Each parcel is a countdown. For a parcel stamped n, deliver "
+             "parcels n, n-1, n-2 and so on, down to 1.",
+    .goal = "For each parcel n, deliver n, n-1, ... down to 1.",
+    .tools = TOOLS_LOOP,
+    .starter = "// For each parcel n, deliver n, n-1, ..., 1.\n"
+               "void run(void) {\n"
+               "    \n"
+               "}\n",
+    .examples = COUNTDOWN_EXAMPLES,
+    .example_count = 2,
+    .reference = "void run(void) {\n"
+                 "    while (has_input()) {\n"
+                 "        int n = take();\n"
+                 "        for (int i = n; i > 0; i--) {\n"
+                 "            put(i);\n"
+                 "        }\n"
+                 "    }\n"
+                 "}\n",
+    .register_natives = mailroom_natives,
+    .generate = countdown_generate,
+    .solve = countdown_solve,
+    .par_size = 4,
+    .par_speed = 61,
+};
+
+/* ---- the list / 목록 ---------------------------------------------------- */
+
+const LevelDef *const LEVEL_LIST[LEVEL_SLOTS] = {
+    &LEVEL_MAILROOM, &LEVEL_NIGHT_SHIFT, NULL, &LEVEL_WEIGH_STATION, NULL,
+    &LEVEL_HEAD_COUNT, &LEVEL_BIGGEST_BOX, NULL, &LEVEL_COUNTDOWN, NULL, NULL
+};
+
+const char *const LEVEL_NAMES[LEVEL_SLOTS] = {
+    "Mailroom", "Night Shift", "Damaged Goods", "Weigh Station", "Two Belts",
+    "Head Count", "Biggest Box", "Stamp Press", "Countdown", "Back Shelf",
+    "Holiday Rush"
 };

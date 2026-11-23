@@ -55,8 +55,10 @@ endif()
 # ---- game / 게임 ------------------------------------------------------------
 add_executable(codebomb
     src/main.c src/ui.c src/editor_ui.c src/scene_mailroom.c
-    src/screen_mailroom.c src/screen_arrays.c src/screen_pointers.c src/bomb3d.c
-    ${SOO_DIR}/pointer_SOO.c)
+    src/screen_mailroom.c src/screen_arrays.c src/screen_missions.c
+    src/soo_lessons.c src/help.c src/bomb3d.c
+    ${SOO_DIR}/pointer_SOO.c ${SOO_DIR}/stage6_SOO.c ${SOO_DIR}/stage7_SOO.c
+    ${SOO_DIR}/stage8_SOO.c)
 target_link_libraries(codebomb PRIVATE cb_core raylib)
 if (APPLE)
     target_link_libraries(codebomb PRIVATE
@@ -73,6 +75,6 @@ add_custom_command(TARGET codebomb POST_BUILD
 enable_testing()
 add_executable(cb_tests
     tests/test_main.c tests/test_vm.c tests/test_compiler.c
-    tests/test_editor.c tests/test_bridge.c)
+    tests/test_editor.c tests/test_bridge.c tests/test_levels.c)
 target_link_libraries(cb_tests PRIVATE cb_core)
 add_test(NAME cb_tests COMMAND cb_tests)

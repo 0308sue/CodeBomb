@@ -1,6 +1,11 @@
 /*
- * screen_mailroom.c - level 1 "Mailroom": editor, 3D scene and VM inspector
- * screen_mailroom.c - 레벨 1 "우편실": 에디터, 3D 장면, VM 인스펙터
+ * screen_mailroom.c - the Mailroom levels: editor, 3D scene and VM inspector
+ * screen_mailroom.c - 우편실 레벨: 에디터, 3D 장면, VM 인스펙터
+ *
+ * The level row under the header lists every level of docs/MAILROOM.md;
+ * planned ones are dimmed. Each level keeps its own code.
+ * 헤더 아래 레벨 줄은 docs/MAILROOM.md의 모든 레벨을 보여 준다. 계획된
+ * 레벨은 흐리게 표시한다. 레벨마다 코드가 따로 저장된다.
  *
  * The VM runs live here: take() and put() pause it while the robot moves.
  * (The Arrays screen instead records a trace first, for Sumin's Back.)
@@ -11,6 +16,7 @@
 
 #include "compiler.h"
 #include "editor.h"
+#include "help.h"
 #include "level.h"
 #include "programs.h"
 #include "scene.h"
@@ -66,6 +72,13 @@ struct MailroomScreen {
 
     char               message[512];
     Color              message_color;
+
+    bool               examples_open;    /* Examples menu / Examples 메뉴 */
+    int                slot;             /* LEVEL_LIST index / 레벨 칸 */
+    char              *code[LEVEL_SLOTS];/* saved code per level / 레벨별 코드 */
+    bool               passed[LEVEL_SLOTS];
+    bool               machine_view;     /* inspector: Simple or Machine
+                                            인스펙터: Simple 또는 Machine */
 };
 
 /* ---- helpers / 도우미 --------------------------------------------------- */
@@ -81,10 +94,13 @@ static void set_message(MailroomScreen *a, Color c, const char *fmt, ...)
 
 /* Editor rectangle below the brief (brief height varies).
  * 설명 아래의 에디터 영역 (설명 높이에 따라 달라짐). */
+/* The long explanation lives in the Help screen; the panel keeps the
+ * title, a one-line goal and the functions.
+ * 긴 설명은 도움말 화면에 있고, 패널에는 제목, 한 줄 목표, 함수만 둔다. */
 static int examples_y(const MailroomScreen *a)
 {
-    int y = 280 + ui_wrapped_height(a->level->brief, MW, FS_SMALL);
-    return y + ui_line_height(FS_SMALL) + 12;
+    (void)a;
+    return 356;
 }
 
 static Rectangle editor_rect(const MailroomScreen *a)
@@ -169,6 +185,7 @@ static void submit(MailroomScreen *a)
                     size <= a->level->par_size ? "MET" : "missed",
                     r.avg_steps, a->level->par_speed,
                     r.avg_steps <= a->level->par_speed ? "MET" : "missed");
+        a->passed[a->slot] = true;
     } else {
         set_message(a, UI_ERROR, "%s", r.message);
     }
@@ -298,7 +315,17 @@ MailroomScreen *mailroom_create(const EditorStyle *style)
         mailroom_destroy(a);
         return NULL;
     }
+    for (int s = 0; s < LEVEL_SLOTS; ++s) {
+        if (!LEVEL_LIST[s]) continue;
+        a->code[s] = calloc(1, ED_MAX_TEXT);
+        if (!a->code[s]) {
+            mailroom_destroy(a);
+            return NULL;
+        }
+        snprintf(a->code[s], ED_MAX_TEXT, "%s", LEVEL_LIST[s]->starter);
+    }
     a->level = &LEVEL_MAILROOM;
+    a->slot = 0;
     a->style = style;
     a->view = LoadRenderTexture((int)VIEW.width, (int)VIEW.height);
 
@@ -325,6 +352,7 @@ void mailroom_destroy(MailroomScreen *a)
     if (!a) return;
     if (a->view.id != 0) UnloadRenderTexture(a->view);
     if (a->scene.state) a->scene.destroy(a->scene.state);
+    for (int s = 0; s < LEVEL_SLOTS; ++s) free(a->code[s]);
     free(a->ed);
     free(a->vm);
     free(a->prog);
@@ -332,6 +360,43 @@ void mailroom_destroy(MailroomScreen *a)
 }
 
 bool mailroom_typing(const MailroomScreen *a) { return a->ed->focused; }
+
+static const int HELP_FOR_SLOT[LEVEL_SLOTS] = {
+    HELP_MAILROOM, HELP_NIGHT_SHIFT, HELP_MAILROOM, HELP_WEIGH_STATION,
+    HELP_MAILROOM, HELP_HEAD_COUNT, HELP_BIGGEST_BOX, HELP_MAILROOM,
+    HELP_COUNTDOWN, HELP_MAILROOM, HELP_MAILROOM
+};
+
+int mailroom_help_topic(const MailroomScreen *a) { return HELP_FOR_SLOT[a->slot]; }
+
+bool mailroom_select_level(MailroomScreen *a, int slot)
+{
+    if (slot < 0 || slot >= LEVEL_SLOTS || !LEVEL_LIST[slot]) return false;
+    if (slot == a->slot) return true;
+    snprintf(a->code[a->slot], ED_MAX_TEXT, "%s", a->ed->text);   /* save */
+    a->slot = slot;
+    a->level = LEVEL_LIST[slot];
+    a->examples_open = false;
+    if (a->mode == RUN_GO) a->mode = RUN_IDLE;
+
+    /* The level's functions get syntax colours. / 레벨 함수에 문법 색상. */
+    prog_init(a->prog);
+    a->level->register_natives(a->prog);
+    int n = a->prog->native_count;
+    for (int i = 0; i < n; ++i) {
+        snprintf(a->known[i], sizeof a->known[i], "%s", a->prog->natives[i].name);
+        a->known_ptrs[i] = a->known[i];
+    }
+    ed_set_known(a->ed, a->known_ptrs, n);
+    ed_set_text(a->ed, a->code[slot], false);
+    ed_set_cursor(a->ed, ed_pos_at(a->ed, 2, 4), false);
+    compile_now(a);
+    a->seen_version = a->ed->version;
+    set_message(a, UI_MUTED, "Level %d: %s. Write your program, then press Run "
+                             "(F5).", a->level->number, a->level->title);
+    help_open_once((HelpTopic)mailroom_help_topic(a));
+    return true;
+}
 
 void mailroom_leave(MailroomScreen *a)
 {
@@ -345,7 +410,9 @@ void mailroom_leave(MailroomScreen *a)
 
 void mailroom_update(MailroomScreen *a, float dt)
 {
-    editor_ui_update(a->ed, editor_rect(a), a->style);
+    /* the Examples menu covers the editor while it is open
+       Examples 메뉴가 열려 있으면 에디터를 덮는다 */
+    if (!a->examples_open) editor_ui_update(a->ed, editor_rect(a), a->style);
     watch_edits(a);
 
     bool cmd = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL) ||
@@ -365,8 +432,6 @@ void mailroom_render_view(MailroomScreen *a)
 {
     BeginTextureMode(a->view);
     a->scene.draw(a->scene.state, (int)VIEW.width, (int)VIEW.height);
-    DrawText(TextFormat("Speed %s", SPEED_NAMES[a->speed_index]), 16, 14,
-             FS_SMALL, UI_MUTED);
     EndTextureMode();
 }
 
@@ -381,51 +446,16 @@ static Color status_color(VMStatus s)
     return UI_INK;
 }
 
-static void draw_inspector(MailroomScreen *a)
+/* Variables of every active function, newest first. Returns the next y.
+ * 실행 중인 함수의 변수 (최근 것부터). 다음 y를 돌려준다. */
+static int draw_variables(const MailroomScreen *a, int x, int y, int bottom)
 {
     const VM *vm = a->vm;
     const Program *p = a->prog;
-    char buf[128];
     const int lh = 28;
-    ui_panel(INSP);
-
-    /* column 1: machine state / 1열: 기계 상태 */
-    int x = (int)INSP.x + 24, y = (int)INSP.y + 16;
-    DrawText("MACHINE", x, y, FS_SMALL, UI_ACCENT);
-    y += 34;
-    const char *status = a->compiled_ok ? vm_status_name(vm->status)
-                                        : "NOT COMPILED";
-    DrawText(TextFormat("Status  %s", status), x, y, FS_SMALL,
-             a->compiled_ok ? status_color(vm->status) : UI_ERROR);
-    y += lh;
-    DrawText(TextFormat("Steps   %ld", vm->steps), x, y, FS_SMALL, UI_INK);
-    y += lh;
-    DrawText(TextFormat("Line    %d", vm_current_line(vm)), x, y, FS_SMALL,
-             UI_INK);
-    y += lh;
-    DrawText(TextFormat("Size    %d stmt",
-                        a->compiled_ok ? a->compile.statements : 0),
-             x, y, FS_SMALL, UI_INK);
-    y += lh + 8;
-    level_format_items(a->run.inbox + a->run.inbox_pos,
-                       a->run.inbox_len - a->run.inbox_pos, buf, sizeof buf);
-    DrawText(TextFormat("Inbox   %s", buf), x, y, FS_SMALL, UI_ACCENT);
-    y += lh;
-    level_format_items(a->run.outbox, a->run.outbox_len, buf, sizeof buf);
-    DrawText(TextFormat("Outbox  %s", buf), x, y, FS_SMALL, UI_SUCCESS);
-    y += lh;
-    level_format_items(a->run.expected, a->run.expected_len, buf, sizeof buf);
-    DrawText(TextFormat("Goal    %s", buf), x, y, FS_SMALL, UI_MUTED);
-
-    /* column 2: variables and operand stack / 2열: 변수와 피연산자 스택 */
-    x = (int)INSP.x + 380;
-    y = (int)INSP.y + 16;
-    DrawText("VARIABLES", x, y, FS_SMALL, UI_ACCENT);
-    y += 34;
-    int bottom = (int)(INSP.y + INSP.height) - 100;
     if (vm->frame_count == 0) {
         DrawText("(no active function)", x, y, FS_SMALL, UI_MUTED);
-        y += lh;
+        return y + lh;
     }
     for (int f = vm->frame_count - 1; f >= 0 && y < bottom; --f) {
         const Frame *fr = &vm->frames[f];
@@ -451,6 +481,104 @@ static void draw_inspector(MailroomScreen *a)
             y += lh;
         }
     }
+    return y;
+}
+
+/* A row of parcel chips: "INBOX  [5] [1] [79]".
+ * 소포 칩 한 줄: "INBOX  [5] [1] [79]". */
+static void draw_parcels(const char *label, const int32_t *items, int n, int x,
+                         int y, Color c)
+{
+    DrawText(label, x, y + 10, FS_SMALL, c);
+    int cx = x + 120;
+    if (n == 0) DrawText("(empty)", cx, y + 10, FS_SMALL, UI_MUTED);
+    for (int k = 0; k < n && cx < x + 480; k++) {
+        const char *t = TextFormat("%d", (int)items[k]);
+        int w = MeasureText(t, FS_SMALL) + 28;
+        DrawRectangleRounded((Rectangle){ (float)cx, (float)y, (float)w, 40 },
+                             0.25f, 6, (Color){ 150, 104, 60, 255 });
+        DrawText(t, cx + 14, y + 10, FS_SMALL, UI_INK);
+        cx += w + 8;
+    }
+}
+
+/* Simple view: parcels, program state and variables. Machine view adds the
+ * operand stack and bytecode for Step op.
+ * Simple 보기: 소포, 프로그램 상태, 변수. Machine 보기는 Step op를 위한
+ * 피연산자 스택과 바이트코드를 더한다. */
+static void draw_inspector(MailroomScreen *a)
+{
+    const VM *vm = a->vm;
+    const Program *p = a->prog;
+    char buf[128];
+    const int lh = 28;
+    ui_panel(INSP);
+
+    float tx = INSP.x + INSP.width - 24 - 2 * 140 - 10;
+    if (ui_button((Rectangle){ tx, INSP.y + 14, 140, 44 }, "Simple", true,
+                  !a->machine_view))
+        a->machine_view = false;
+    if (ui_button((Rectangle){ tx + 150, INSP.y + 14, 140, 44 }, "Machine", true,
+                  a->machine_view))
+        a->machine_view = true;
+
+    const char *status = a->compiled_ok ? vm_status_name(vm->status)
+                                        : "NOT COMPILED";
+    Color scol = a->compiled_ok ? status_color(vm->status) : UI_ERROR;
+
+    if (!a->machine_view) {
+        int x = (int)INSP.x + 24, y = (int)INSP.y + 22;
+        DrawText("PARCELS", x, y, FS_SMALL, UI_ACCENT);
+        y += 46;
+        draw_parcels("INBOX", a->run.inbox + a->run.inbox_pos,
+                     a->run.inbox_len - a->run.inbox_pos, x, y, UI_ACCENT);
+        draw_parcels("OUTBOX", a->run.outbox, a->run.outbox_len, x, y + 62,
+                     UI_SUCCESS);
+        draw_parcels("GOAL", a->run.expected, a->run.expected_len, x, y + 124,
+                     UI_MUTED);
+
+        x = (int)INSP.x + 560;
+        y = (int)INSP.y + 22;
+        DrawText("PROGRAM", x, y, FS_SMALL, UI_ACCENT);
+        y += 46;
+        DrawText(TextFormat("Status  %s", status), x, y, FS_SMALL, scol);
+        y += lh;
+        DrawText(TextFormat("Line    %d", vm_current_line(vm)), x, y, FS_SMALL,
+                 UI_INK);
+        y += lh + 16;
+        DrawText("VARIABLES", x, y, FS_SMALL, UI_ACCENT);
+        draw_variables(a, x, y + 34, (int)(INSP.y + INSP.height) - 20);
+        return;
+    }
+
+    /* column 1: machine state / 1열: 기계 상태 */
+    int x = (int)INSP.x + 24, y = (int)INSP.y + 22;
+    DrawText("MACHINE", x, y, FS_SMALL, UI_ACCENT);
+    y += 40;
+    DrawText(TextFormat("Status  %s", status), x, y, FS_SMALL, scol);
+    y += lh;
+    DrawText(TextFormat("Steps   %ld", vm->steps), x, y, FS_SMALL, UI_INK);
+    y += lh;
+    DrawText(TextFormat("Line    %d", vm_current_line(vm)), x, y, FS_SMALL,
+             UI_INK);
+    y += lh;
+    DrawText(TextFormat("Size    %d stmt",
+                        a->compiled_ok ? a->compile.statements : 0),
+             x, y, FS_SMALL, UI_INK);
+    y += lh + 8;
+    level_format_items(a->run.inbox + a->run.inbox_pos,
+                       a->run.inbox_len - a->run.inbox_pos, buf, sizeof buf);
+    DrawText(TextFormat("Inbox   %s", buf), x, y, FS_SMALL, UI_ACCENT);
+    y += lh;
+    level_format_items(a->run.outbox, a->run.outbox_len, buf, sizeof buf);
+    DrawText(TextFormat("Outbox  %s", buf), x, y, FS_SMALL, UI_SUCCESS);
+
+    /* column 2: variables and operand stack / 2열: 변수와 피연산자 스택 */
+    x = (int)INSP.x + 380;
+    y = (int)INSP.y + 22;
+    DrawText("VARIABLES", x, y, FS_SMALL, UI_ACCENT);
+    int bottom = (int)(INSP.y + INSP.height) - 100;
+    draw_variables(a, x, y + 40, bottom);
     y = bottom + 10;
     DrawText("OPERAND STACK", x, y, FS_SMALL, UI_ACCENT);
     y += 32;
@@ -460,12 +588,12 @@ static void draw_inspector(MailroomScreen *a)
                             vm->sp > 1 ? "  ..." : ""),
                  x, y, FS_SMALL, UI_INK);
 
-    /* column 3: bytecode / 3열: 바이트코드 */
+    /* column 3: bytecode (below the view buttons) / 3열: 바이트코드 */
     x = (int)INSP.x + 720;
-    y = (int)INSP.y + 16;
+    y = (int)INSP.y + 70;
     DrawText("BYTECODE", x, y, FS_SMALL, UI_ACCENT);
     y += 34;
-    int start_pc = vm->pc - 3;
+    int start_pc = vm->pc - 2;
     if (start_pc < 0) start_pc = 0;
     bool live = vm->status == VM_PAUSED || vm->status == VM_YIELDED;
     for (int i = start_pc; i < p->code_len &&
@@ -480,31 +608,102 @@ static void draw_inspector(MailroomScreen *a)
     }
 }
 
+/* The Examples menu: each program with one line on what it shows.
+ * Examples 메뉴: 각 프로그램과 그것이 보여 주는 것 한 줄. */
+/* Level 1 uses the hand-built demos (programs.c); later levels list their
+ * own examples. / 레벨 1은 programs.c의 데모, 이후 레벨은 자체 예제. */
+static int example_count(const MailroomScreen *a)
+{
+    return a->level->examples ? a->level->example_count : demo_count();
+}
+
+static void example_get(const MailroomScreen *a, int i, const char **name,
+                        const char **about, const char **source)
+{
+    if (a->level->examples) {
+        *name = a->level->examples[i].name;
+        *about = a->level->examples[i].about;
+        *source = a->level->examples[i].source;
+    } else {
+        *name = demo_get(i)->name;
+        *about = demo_get(i)->about;
+        *source = demo_get(i)->source;
+    }
+}
+
+static void draw_examples_menu(MailroomScreen *a, Rectangle anchor)
+{
+    int n = example_count(a);
+    Rectangle box = { anchor.x, anchor.y + anchor.height + 8, 700,
+                      18 + n * 72.0f };
+    DrawRectangleRounded((Rectangle){ box.x, box.y + 6, box.width, box.height },
+                         0.06f, 8, (Color){ 10, 6, 20, 200 });
+    DrawRectangleRounded(box, 0.06f, 8, UI_PANEL);
+    DrawRectangleRoundedLinesEx(box, 0.06f, 8, 2.0f, UI_ACCENT);
+    Vector2 m = ui_mouse();
+    for (int i = 0; i < n; ++i) {
+        const char *name, *about, *source;
+        example_get(a, i, &name, &about, &source);
+        Rectangle r = { box.x + 9, box.y + 9 + i * 72.0f, box.width - 18, 64 };
+        bool hover = CheckCollisionPointRec(m, r);
+        if (hover) DrawRectangleRounded(r, 0.12f, 6, UI_HOVER);
+        DrawText(name, (int)r.x + 16, (int)r.y + 8, FS_SMALL, UI_INK);
+        DrawText(about, (int)r.x + 16, (int)r.y + 36, FS_SMALL, UI_MUTED);
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            load_code(a, source);
+            a->examples_open = false;
+            return;
+        }
+    }
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        !CheckCollisionPointRec(m, box) && !CheckCollisionPointRec(m, anchor))
+        a->examples_open = false;
+}
+
+/* One button per level; planned levels show only their number, dimmed.
+ * 레벨마다 버튼 하나. 계획된 레벨은 번호만 흐리게 보인다. */
+static void draw_level_row(MailroomScreen *a)
+{
+    DrawText("LEVELS", 45, 128, FS_SMALL, UI_MUTED);
+    float x = 150;
+    for (int s = 0; s < LEVEL_SLOTS; ++s) {
+        const LevelDef *l = LEVEL_LIST[s];
+        const char *label = l ? TextFormat("%d  %s", s + 1, l->title)
+                              : TextFormat("%d", s + 1);
+        float w = (float)MeasureText(label, FS_SMALL) + 36;
+        Rectangle r = { x, 112, w, 52 };
+        if (ui_button(r, label, l != NULL, s == a->slot))
+            mailroom_select_level(a, s);
+        if (a->passed[s])
+            DrawCircle((int)(r.x + r.width - 12), (int)(r.y + 12), 5,
+                       UI_SUCCESS);
+        x += w + 10;
+    }
+}
+
 void mailroom_draw(MailroomScreen *a)
 {
     ui_background();
-    ui_header("Mailroom", "LEVEL 1: STATEMENTS & FUNCTION CALLS");
+    ui_header("Mailroom", NULL);
+    draw_level_row(a);
 
-    /* left panel: brief, examples, editor, messages
-     * 왼쪽 패널: 설명, 예제, 에디터, 메시지 */
+    /* left panel: goal, code buttons, editor, messages. The full story is
+     * in Help. / 왼쪽 패널: 목표, 코드 버튼, 에디터, 메시지. 자세한 설명은
+     * Help에 있다. */
     ui_panel(LPANEL);
     DrawText(TextFormat("Level %d: %s", a->level->number, a->level->title), MX,
              198, FS_BODY, UI_INK);
     DrawText(a->level->concept, MX, 240, FS_SMALL, UI_ACCENT);
-    int y = ui_wrapped(a->level->brief, MX, 280, MW, FS_SMALL, UI_MUTED);
-    DrawText(a->level->tools, MX, y + 4, FS_SMALL, UI_ACCENT);
+    DrawText(a->level->goal, MX, 280, FS_SMALL, UI_INK);
+    DrawText(a->level->tools, MX, 314, FS_SMALL, UI_MUTED);
 
-    y = examples_y(a);
-    DrawText("Examples", MX, y + 12, FS_SMALL, UI_MUTED);
-    int n = demo_count() + 1;
-    float bx = MX + 116.0f;
-    float bw = (MW - 116.0f - (n - 1) * 10.0f) / n;
-    if (ui_button((Rectangle){ bx, (float)y, bw, 44 }, "Starter", true, false))
+    int y = examples_y(a);
+    if (ui_button((Rectangle){ MX, (float)y, 220, 44 }, "Starter code", true,
+                  false))
         load_code(a, a->level->starter);
-    for (int i = 0; i < demo_count(); ++i)
-        if (ui_button((Rectangle){ bx + (i + 1) * (bw + 10.0f), (float)y, bw, 44 },
-                      demo_get(i)->name, true, false))
-            load_code(a, demo_get(i)->source);
+    Rectangle ex = { MX + 234, (float)y, 220, 44 };
+    if (ui_button(ex, "Examples", true, a->examples_open))
+        a->examples_open = !a->examples_open;
 
     editor_ui_draw(a->ed, editor_rect(a), a->style);
 
@@ -513,9 +712,8 @@ void mailroom_draw(MailroomScreen *a)
     ui_wrapped(a->message, MX + 14, 962, MW - 28, FS_SMALL, a->message_color);
 
     /* right: 3D scene and inspector / 오른쪽: 3D 장면과 인스펙터 */
-    DrawTextureRec(a->view.texture,
-                   (Rectangle){ 0, 0, VIEW.width, -VIEW.height },
-                   (Vector2){ VIEW.x, VIEW.y }, WHITE);
+    ui_draw_view(a->view.texture, (Rectangle){ 0, 0, VIEW.width, -VIEW.height },
+                 VIEW);
     DrawRectangleLinesEx(VIEW, 2.0f, UI_BORDER);
     draw_inspector(a);
 
@@ -560,9 +758,8 @@ void mailroom_draw(MailroomScreen *a)
     }
     if (control) a->ed->focused = true;
 
-    DrawText("F5 / Ctrl+Enter: run    F6: step    F7: step op    F8: reset    "
-             "F9: submit    Esc: leave editor    (Mac: Cmd+Enter, fn+F5)",
-             45, 1160, FS_SMALL, UI_MUTED);
+    /* the menu goes on top of everything else / 메뉴는 맨 위에 그린다 */
+    if (a->examples_open) draw_examples_menu(a, ex);
 
     watch_edits(a);         /* example buttons may have changed the code
                                예제 버튼이 코드를 바꿨을 수 있음 */
@@ -571,7 +768,23 @@ void mailroom_draw(MailroomScreen *a)
 
 void mailroom_qa(MailroomScreen *a, int demo, int steps)
 {
-    if (demo >= 0 && demo < demo_count()) load_code(a, demo_get(demo)->source);
+    /* demo 10+: Machine view; 20: Examples menu open
+       demo 10 이상: Machine 보기; 20: Examples 메뉴 열림 */
+    if (demo == 20) {
+        a->examples_open = true;
+        demo = -1;
+    } else if (demo >= 10) {
+        a->machine_view = true;
+        demo -= 10;
+    }
+    /* demo 9: the level's reference answer / demo 9: 레벨의 정답 */
+    if (demo == 9) {
+        load_code(a, a->level->reference);
+    } else if (demo >= 0 && demo < example_count(a)) {
+        const char *name, *about, *source;
+        example_get(a, demo, &name, &about, &source);
+        load_code(a, source);
+    }
     watch_edits(a);
     compile_now(a);
     a->run.headless = true;          /* no animation waits / 애니메이션 대기 없음 */

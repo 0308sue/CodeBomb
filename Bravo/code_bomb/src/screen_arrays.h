@@ -44,6 +44,18 @@ void arrays_render_view(ArraysScreen *s);
  * 코드 에디터가 키보드 포커스를 가진 동안 true. */
 bool arrays_typing(const ArraysScreen *s);
 
+/* Open bomb 0-5 (levels 1-6) or 6 (cube) in Write code mode, or Sumin's
+ * Find the bug mission. / 폭탄 0-5 (레벨 1-6)나 6 (큐브)을 Write code
+ * 모드로 열거나, 수민의 Find the bug 미션을 연다. */
+void arrays_open(ArraysScreen *s, int level, bool find_the_bug);
+
+/* Which bombs are defused (7 entries). / 해체한 폭탄 (7개). */
+void arrays_defused(const ArraysScreen *s, bool out[7]);
+
+/* Keeps the Cube bomb's clock running while a pop-up covers the screen.
+ * 팝업이 화면을 덮는 동안에도 큐브 폭탄의 시계가 계속 간다. */
+void arrays_tick(ArraysScreen *s, float dt);
+
 /* Called when another screen is opened. / 다른 화면을 열 때 호출. */
 void arrays_leave(ArraysScreen *s);
 
