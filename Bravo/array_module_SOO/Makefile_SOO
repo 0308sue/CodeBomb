@@ -5,11 +5,20 @@ CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -Werror -O2
 RAYLIB_FLAGS = $(shell pkg-config --cflags --libs raylib)
 .PHONY: all test clean
 all: array_circuit_SOO
-array_circuit_SOO: main_SOO.c array_core_SOO.c array_core_SOO.h quiz_SOO.h pointer_SOO.c pointer_SOO.h
-	$(CC) $(CFLAGS) main_SOO.c array_core_SOO.c pointer_SOO.c -o $@ $(RAYLIB_FLAGS)
-test: test_core_SOO
+array_circuit_SOO: main_SOO.c array_core_SOO.c array_core_SOO.h quiz_SOO.h roadmap_SOO.h stage3_view_SOO.h stage4_view_SOO.h stage5_view_SOO.h stage6_view_SOO.h stage7_view_SOO.h stage8_view_SOO.h stage1_SOO.h stage2_SOO.h stage3_SOO.h stage4_SOO.h stage5_SOO.h stage6_SOO.h stage6_SOO.c stage7_SOO.h stage7_SOO.c stage8_SOO.h stage8_SOO.c pointer_SOO.c pointer_SOO.h
+	$(CC) $(CFLAGS) main_SOO.c array_core_SOO.c pointer_SOO.c stage6_SOO.c stage7_SOO.c stage8_SOO.c -o $@ $(RAYLIB_FLAGS)
+test: test_core_SOO test_stage6_SOO test_stage7_SOO test_stage8_SOO
 	./test_core_SOO
-test_core_SOO: test_core_SOO.c array_core_SOO.c array_core_SOO.h pointer_SOO.c pointer_SOO.h
-	$(CC) $(CFLAGS) -fsanitize=address,undefined -g test_core_SOO.c array_core_SOO.c pointer_SOO.c -o $@
+	./test_stage6_SOO
+	./test_stage7_SOO
+	./test_stage8_SOO
+test_core_SOO: test_core_SOO.c array_core_SOO.c array_core_SOO.h pointer_SOO.c pointer_SOO.h stage1_SOO.h stage2_SOO.h stage3_SOO.h stage4_SOO.h stage5_SOO.h stage6_SOO.h stage6_SOO.c
+	$(CC) $(CFLAGS) -fsanitize=address,undefined -g test_core_SOO.c array_core_SOO.c pointer_SOO.c stage6_SOO.c stage7_SOO.c -o $@
+test_stage6_SOO: test_stage6_SOO.c stage6_SOO.c stage6_SOO.h
+	$(CC) $(CFLAGS) -fsanitize=address,undefined -g test_stage6_SOO.c stage6_SOO.c -o $@
+test_stage7_SOO: test_stage7_SOO.c stage7_SOO.c stage7_SOO.h
+	$(CC) $(CFLAGS) -fsanitize=address,undefined -g test_stage7_SOO.c stage7_SOO.c -o $@
+test_stage8_SOO: test_stage8_SOO.c stage8_SOO.c stage8_SOO.h
+	$(CC) $(CFLAGS) -fsanitize=address,undefined -g test_stage8_SOO.c stage8_SOO.c -o $@
 clean:
-	rm -f array_circuit_SOO test_core_SOO
+	rm -f array_circuit_SOO test_core_SOO test_stage6_SOO test_stage7_SOO test_stage8_SOO

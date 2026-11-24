@@ -100,10 +100,14 @@ static void build_uninit(Program *p)
 }
 
 static const DemoProgram DEMOS[] = {
-    { "Solution", SRC_SOLUTION, 3, build_solution },
-    { "Loop",     SRC_LOOP,     3, build_loop },
-    { "Too many", SRC_TOO_MANY, 4, build_too_many },
-    { "Uninit",   SRC_UNINIT,   2, build_uninit },
+    { "Solution", SRC_SOLUTION, 3, build_solution,
+      "A working answer for three parcels" },
+    { "Loop",     SRC_LOOP,     3, build_loop,
+      "while (has_input()): any number of parcels" },
+    { "Too many", SRC_TOO_MANY, 4, build_too_many,
+      "Bug: take() from an empty inbox" },
+    { "Uninit",   SRC_UNINIT,   2, build_uninit,
+      "Bug: reads a variable that has no value" },
 };
 
 int demo_count(void) { return (int)(sizeof DEMOS / sizeof DEMOS[0]); }

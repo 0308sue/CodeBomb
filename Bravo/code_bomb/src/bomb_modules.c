@@ -13,7 +13,7 @@ const SooLevel CUBE_MODULES[CUBE_MODULE_COUNT] = {
         /* Arithmetic on values: cards[i] = 1 - cards[i]
          * 값에 대한 산술 */
         "C1  Invert", "Arithmetic on values",
-        "Flip every card: 0 becomes 1 and 1 becomes 0.",
+        "Flip every card: each 0 becomes 1 and each 1 becomes 0.",
         1, 6,
         { 1, 0, 0, 1, 1, 0 },
         { 0, 1, 1, 0, 0, 1 },
@@ -23,7 +23,8 @@ const SooLevel CUBE_MODULES[CUBE_MODULE_COUNT] = {
         /* Modulo on the index: cards[i] = (i % 2 == 0)
          * 인덱스에 대한 나머지 연산 */
         "C2  Even slots", "The % operator on indices",
-        "Set cards at even indices to 1 and cards at odd indices to 0.",
+        "Cards at even indexes (0, 2, 4 ...) must be 1, and cards at odd "
+        "indexes (1, 3, 5 ...) must be 0.",
         1, 6,
         { 0, 0, 1, 1, 0, 1 },
         { 1, 0, 1, 0, 1, 0 },
@@ -33,8 +34,10 @@ const SooLevel CUBE_MODULES[CUBE_MODULE_COUNT] = {
         /* Index arithmetic: cards[N - 1 - i] = cards[i]
          * 인덱스 계산 */
         "C3  Mirror", "Index arithmetic",
-        "Make the row read the same both ways: copy the left half onto the "
-        "right half (cards[N - 1 - i] = cards[i]).",
+        "Make the row a mirror image. Leave the left half as it is and copy "
+        "each left card onto its partner the same distance from the right "
+        "end: [0] onto [N-1], [1] onto [N-2] ... For example 1 1 0 | 0 0 1 "
+        "becomes 1 1 0 | 0 1 1.",
         1, 6,
         { 1, 1, 0, 0, 0, 1 },
         { 1, 1, 0, 0, 1, 1 },
@@ -44,7 +47,8 @@ const SooLevel CUBE_MODULES[CUBE_MODULE_COUNT] = {
         /* 2D indices and %: grid[i][j] = (i + j) % 2
          * 2D 인덱스와 % */
         "C4  Checkerboard", "2D indices and %",
-        "Paint a checkerboard: grid[i][j] must be (i + j) % 2.",
+        "Paint a checkerboard: every card must become (i + j) % 2, so "
+        "grid[0][0] is 0, its neighbours are 1, and so on.",
         4, 4,
         { 1, 1, 0, 0,
           0, 0, 1, 1,
@@ -60,7 +64,8 @@ const SooLevel CUBE_MODULES[CUBE_MODULE_COUNT] = {
         /* Conditions on indices: edges are 1, the inside is 0
          * 인덱스에 대한 조건 */
         "C5  Border", "Conditions with || on indices",
-        "Set the outer ring of cards to 1 and the four inside cards to 0.",
+        "Every card on the outside edge must be 1, and every card inside "
+        "must be 0.",
         4, 4,
         { 1, 0, 1, 1,
           0, 1, 0, 1,

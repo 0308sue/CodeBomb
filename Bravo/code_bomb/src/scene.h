@@ -22,6 +22,11 @@ typedef struct Scene {
     void (*update)(void *state, float dt);   /* dt already speed-scaled
                                                 dt는 이미 속도 배율이 적용됨 */
     bool (*busy)(const void *state);
+    /* Optional: offscreen passes (shadows, supersampling) that must run
+     * outside any BeginTextureMode. Called just before draw().
+     * 선택: BeginTextureMode 밖에서 해야 하는 화면 밖 단계 (그림자,
+     * 슈퍼샘플링). draw() 바로 전에 호출된다. */
+    void (*prerender)(void *state, int width, int height);
     void (*draw)(void *state, int width, int height);
     void (*destroy)(void *state);
 } Scene;

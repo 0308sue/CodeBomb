@@ -19,9 +19,12 @@
  *
  * Effects: the accessed card lifts and glows, a write flashes the card and
  * throws sparks, a failure shakes the bomb with a red flash, success turns
- * the lights green.
+ * the lights green. When the Cube bomb explodes: a white flash, a fireball,
+ * a shock ring on the table, fire, smoke and flying pieces of the casing.
  * 효과: 접근한 카드는 올라오며 빛나고, 쓰기는 카드를 번쩍이며 불꽃을 튀기고,
  * 실패하면 폭탄이 흔들리며 붉게 번쩍이고, 성공하면 불빛이 초록색이 된다.
+ * 큐브 폭탄이 터지면: 하얀 섬광, 불덩이, 탁자 위의 충격파 고리, 불, 연기,
+ * 날아가는 몸체 조각.
  */
 #ifndef BOMB3D_H
 #define BOMB3D_H
@@ -54,6 +57,10 @@ typedef struct {
     char       lcd_caption[12]; /* small word in front of it, e.g. "OPS" */
     char       lcd_small[24];   /* second display, e.g. "i 3  j --"
                                    두 번째 표시창 */
+    bool       lcd_alert;       /* blink the big display (time running out)
+                                   큰 표시창 깜박임 (시간이 얼마 남지 않음) */
+    bool       exploded;        /* cube only: play the explosion, then show
+                                   the wreck / 큐브 전용: 폭발 후 잔해 표시 */
 } BombScene;
 
 typedef struct BombView BombView;

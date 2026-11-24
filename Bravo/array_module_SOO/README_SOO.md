@@ -108,3 +108,43 @@ F11로 전체 화면을 켜거나 끌 수 있습니다. Mac에서는 설정에 �
 
 Drag a window edge to resize. The minimum is 768 × 480. Press F11
 (or fn + F11 on some Macs) to toggle full screen. The layout keeps its aspect ratio.
+
+## Mission map / 미션 지도
+
+앱을 열면 8개 챕터와 40개 레벨 계획이 표시됩니다. 밝은 번호는 현재 플레이할 수 있는 미션이고, 어두운 번호는 개발 예정입니다. **Mission map**으로 돌아올 수 있습니다. 01–06은 Stage 1 미션입니다. 07–11은 포인터 미션, 18–19는 기존 2D 예제입니다.
+
+The app opens on the eight-chapter map. Bright numbers open playable missions. Dim numbers are planned. Use **Mission map** to return. 01–06 open Stage 1, 07–11 open Stage 2 pointers, and 18–19 open the existing 2D examples.
+
+## Stage 3 / 배열 조작
+
+12–16은 답을 고르고 Step이나 Back으로 배열을 확인합니다. 17은 배터리 카드 두 장을 직접 선택합니다. 다시 누르면 선택을 해제합니다. 두 장의 합이 120이면 성공입니다.
+
+For levels 12–16, choose an answer and use Step or Back. In level 17, click two battery cards; click a selected card again to remove it. A pair must total 120.
+
+## Stage 4
+
+18–22 now open Grid Scanner, Pattern Detector, Cluster Destroyer, Gravity System and Chain Reaction. Choose A/B/C, then pause, step or go back. The board is 4 by 6. Green marks the detected cluster; -1 is empty and -2 is new. All levels use prepared examples.
+
+## Stage 5 / Strings and Char Pointers
+
+지도 23–27에서 문자열 미션을 엽니다. 23–26은 A/B/C를 고르고 재생합니다. 26의 Try 8-byte buffer로 공간 부족 예제를 볼 수 있습니다. 27은 기본 BOMB를 Backspace로 지우고 암호를 입력한 뒤 Enter 또는 Verify를 누르세요. 최대 8개의 ASCII 문자를 지원합니다. Reset은 미션을 처음부터 다시 시작합니다.
+
+Open levels 23–27 on the map. Choose A/B/C in levels 23–26. In 26, try the 8-byte buffer after playback. In 27, use Backspace to edit BOMB, type up to eight ASCII characters, then press Enter or Verify. Reset restarts the lesson.
+
+## Stage 6 / Linked Lists
+
+지도 28–33에서 순회, 삽입, 삭제, 탐색, 뒤집기, 인접 쌍 교환을 확인합니다. A/B/C를 고른 뒤 Step/Back으로 head와 연결선을 따라가세요. N0 등의 표시는 배열 인덱스가 아닌 노드 ID입니다. 이중 연결 미션에서 파랑은 next, 분홍은 prev입니다. 노드 값은 그대로 두고 연결만 변경합니다. C 소스에는 실제 malloc/free 기반 리스트 함수와 그 테스트도 포함되어 있습니다.
+
+Open levels 28–33 for traversal, insertion, deletion, search, reversal and adjacent pair swaps. Answer A/B/C, then follow head and the arrows using Step/Back. Node IDs are not array indices. Blue is next; pink is prev. The lesson changes links, not data. Actual C heap-based list functions and tests are included alongside the snapshot viewer.
+
+## Stage 7 / Memory Allocation
+
+34–37은 할당/해제, 동적 배열, 누수와 dangling pointer 미션입니다. 36–37은 답을 고른 후 Original과 Run fix로 비교합니다. 34에는 malloc 실패, 35에는 잘못된 delete, 37에는 alias 실험 버튼이 있습니다. 위험한 메모리 접근은 안전한 모델 안에서 차단합니다. 앱 구현 언어는 C이며 C++ 예제는 학습용 코드입니다.
+
+Levels 34–37 cover allocation, arrays, leaks and dangling pointers. Compare Original and Run fix in 36–37. Extra experiments show malloc failure, incorrect delete and aliases. Unsafe accesses are blocked in a safe model. The app remains C, with C++ examples displayed for learning.
+
+## Stage 8 / Vector and Iterator
+
+38–40을 구현했습니다. 38은 push_back과 size/capacity, 39는 erase 반환 반복자를 보여줍니다. 40에서는 Scan next → 99 찾기 → it = erase(it) → 끝까지 Scan → push_back(40) → Verify circuit 순서로 직접 조작합니다. 오른쪽 예제는 C++이고 앱은 C11입니다. capacity 숫자는 학습용 모델의 값입니다.
+
+All 40 levels are playable. Level 40 is interactive: scan to 99, erase safely, scan to end, append 40, then verify. Level 39 includes original, fixed and last-element examples. The app is C11 with C++ reference snippets. Capacity values are illustrative.

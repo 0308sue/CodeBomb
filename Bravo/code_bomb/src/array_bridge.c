@@ -4,6 +4,8 @@
  */
 #include "array_bridge.h"
 
+#include "compiler.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -38,6 +40,51 @@ static int loop_var(const VM *vm, const char *name)
     return (int)v;
 }
 
+/* ---- level 3's reverse rule for random bombs / 무작위 폭탄의 레벨 3 규칙 --
+ * Sumin's engine checks level 3's right-to-left scan only for her own
+ * level (by address). Random versions of level 3 are registered here and
+ * get the same check with the same message.
+ * 수민의 엔진은 레벨 3의 오른쪽에서 왼쪽 순회를 자신의 레벨(주소)에만
+ * 검사한다. 레벨 3의 무작위 버전은 여기 등록되어 같은 메시지로 같은 검사를
+ * 받는다. */
+#define REVERSE_SLOTS 8
+static const SooLevel *g_reverse[REVERSE_SLOTS];
+static int g_reverse_next;
+
+void array_mark_reverse(const SooLevel *level)
+{
+    for (int k = 0; k < REVERSE_SLOTS; ++k)
+        if (g_reverse[k] == level) return;
+    g_reverse[g_reverse_next] = level;
+    g_reverse_next = (g_reverse_next + 1) % REVERSE_SLOTS;
+}
+
+void array_unmark_reverse(const SooLevel *level)
+{
+    for (int k = 0; k < REVERSE_SLOTS; ++k)
+        if (g_reverse[k] == level) g_reverse[k] = NULL;
+}
+
+bool array_apply(SooState *s, SooEvent e)
+{
+    bool marked = false;
+    for (int k = 0; k < REVERSE_SLOTS; ++k)
+        if (g_reverse[k] && g_reverse[k] == s->level) marked = true;
+    if (marked && e.kind == SOO_READ && s->status != SOO_FAILURE &&
+        s->status != SOO_SUCCESS) {
+        int expected = s->active_col < 0 ? s->level->cols - 1
+                                         : s->active_col - 1;
+        if (e.col != expected) {
+            s->status = SOO_FAILURE;
+            snprintf(s->message, sizeof s->message,
+                     "Reverse route: start at the last card, then decrease i "
+                     "by one.");
+            return false;
+        }
+    }
+    return SooApplyEvent(s, e);
+}
+
 /* ---- trace recording / 실행 기록 ---------------------------------------- */
 
 static bool push_event(ArrayTrace *t, VM *vm, SooEvent e)
@@ -64,7 +111,7 @@ static bool push_event(ArrayTrace *t, VM *vm, SooEvent e)
 static bool send(ArrayTrace *t, VM *vm, SooEvent e)
 {
     if (!push_event(t, vm, e)) return false;
-    if (!SooApplyEvent(&t->live, e)) {
+    if (!array_apply(&t->live, e)) {
         vm_error(vm, "%s", t->live.message);
         return false;
     }
@@ -146,7 +193,7 @@ void array_record(ArrayTrace *t, const Program *prog, const SooLevel *level,
          * run()이 반환됨: 목표에 도달했는지 엔진에 묻는다. */
         SooEvent end = { SOO_END, 0, 0, 0, -1, -1 };
         if (push_event(t, vm, end)) {
-            SooApplyEvent(&t->live, end);
+            array_apply(&t->live, end);
             t->finished = true;
             return;
         }
@@ -177,7 +224,7 @@ bool array_playback_step(const ArrayTrace *t, SooState *s, int *cursor)
 {
     if (s->status == SOO_SUCCESS || s->status == SOO_FAILURE) return false;
     if (*cursor < t->count) {
-        SooApplyEvent(s, t->events[(*cursor)++]);
+        array_apply(s, t->events[(*cursor)++]);
         return true;
     }
     if (*cursor == t->count && has_vm_step(t)) {
@@ -283,11 +330,34 @@ void array_starter_code(const SooLevel *level, char *buf, size_t n)
                               : "grid[0][0] .. grid[ROWS - 1][COLS - 1]");
 }
 
+/* The sizes are named constants: random bombs change them, so code that
+ * uses N, ROWS and COLS works on every bomb.
+ * 크기는 이름 있는 상수다: 무작위 폭탄은 크기를 바꾸므로 N, ROWS, COLS를
+ * 쓰는 코드는 모든 폭탄에서 동작한다. */
 void array_tools_text(const SooLevel *level, char *buf, size_t n)
 {
     if (level->rows == 1)
-        snprintf(buf, n, "cards[i]   N = %d   0 = SAFE, 1 = FAULT", level->cols);
-    else
-        snprintf(buf, n, "grid[i][j]   ROWS = %d   COLS = %d", level->rows,
+        snprintf(buf, n, "cards[i]   N (%d here)   0 = SAFE, 1 = FAULT",
                  level->cols);
+    else
+        snprintf(buf, n, "grid[i][j]   ROWS (%d here)   COLS (%d here)",
+                 level->rows, level->cols);
+}
+
+bool array_check_source(const char *src, int len, const SooLevel *level,
+                        Program *prog, VM *vm, ArrayTrace *t, char *why,
+                        size_t n)
+{
+    CompileResult r;
+    prog_init(prog);
+    array_register_level(prog, level);
+    if (!compile_program(src, len, prog, &r)) {
+        snprintf(why, n, "Line %d: %s", r.line, r.message);
+        return false;
+    }
+    array_record(t, prog, level, vm);
+    SooState end = array_playback_all(t);
+    if (end.status == SOO_SUCCESS) return true;
+    snprintf(why, n, "%s", end.message);
+    return false;
 }

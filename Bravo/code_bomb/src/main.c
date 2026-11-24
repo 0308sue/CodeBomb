@@ -1,33 +1,49 @@
 /*
- * main.c - Code Bomb / Circuit Pals: window, scaling and module tabs
- * main.c - Code Bomb / Circuit Pals: 창, 화면 배율, 모듈 탭
+ * main.c - Code Bomb / Circuit Pals: window, scaling and screens
+ * main.c - Code Bomb / Circuit Pals: 창, 화면 배율, 화면 전환
+ *
+ * Screens / 화면:
+ *   Missions  - the mission map (hub) and Sumin's 40 lessons
+ *               미션 지도(중심 화면)와 수민의 40개 수업
+ *   Bomb      - write C to defuse bombs 1-6 and the cube (3D bomb)
+ *               C를 써서 폭탄 1-6과 큐브를 해체 (3D 폭탄)
+ *   Mailroom  - the tutorial level with the 3D robot
+ *               3D 로봇이 있는 튜토리얼 레벨
  *
  * Every screen draws on a 1920 x 1200 canvas (a render texture). The canvas
  * is scaled to the window with letterboxing, and the mouse is converted
- * back (Sumin's approach, unchanged, so it behaves the same on macOS).
+ * back (Sumin's approach, so it behaves the same on macOS).
  * 모든 화면은 1920 x 1200 캔버스(렌더 텍스처)에 그린다. 캔버스를 비율을
- * 유지하며 창에 맞추고 마우스 좌표는 거꾸로 변환한다 (수민의 방식 그대로,
- * 그래서 macOS에서도 같게 동작한다).
+ * 유지하며 창에 맞추고 마우스 좌표는 거꾸로 변환한다 (수민의 방식이라
+ * macOS에서도 같게 동작한다).
  *
  * On a monitor of at least 1920 x 1200 the game starts in borderless full
- * screen, so the canvas is shown 1:1 and the pixel font is perfectly sharp.
- * F11 switches between full screen and a window.
- * 1920 x 1200 이상의 모니터에서는 테두리 없는 전체 화면으로 시작하므로
- * 캔버스가 1:1로 보이고 픽셀 폰트가 아주 선명하다. F11로 전체 화면과 창을
- * 전환한다.
+ * screen, so the canvas is shown 1:1. F11 switches to a window.
+ * 1920 x 1200 이상의 모니터에서는 테두리 없는 전체 화면으로 시작하여
+ * 캔버스가 1:1로 보인다. F11로 창 모드로 바꾼다.
  *
- * QA screenshots / QA 스크린샷:
+ * QA / 품질 확인:
  *   codebomb --shot FILE.png SCREEN [MODE] [LEVEL] [STEPS] [VARIANT]
- *   e.g. --shot arrays.png arrays code 4 20 0
- *        --shot cube.png arrays code 7 6 22      (cube, 2 modules solved)
- *   codebomb --selftest      checks cube click picking / 큐브 클릭 선택 검사
- *        --shot ptr.png pointers - 0 3 1
- *        --shot mail.png mailroom - 0 9 0
+ *     SCREEN = map | lesson | arrays | mailroom
+ *     e.g. --shot map.png map
+ *          --shot l28.png lesson - 28          (lesson 28, answered)
+ *          --shot b4.png arrays code 4 14 0    (bomb 4, 14 steps)
+ *          --shot cube.png arrays code 7 6 22  (cube, 2 modules solved)
+ *          --shot mail.png mailroom - 1 9 0
+ *          --shot stars.png mailroom stars 1 6 7   (levels 1-6 submitted,
+ *                                                   level 7 open)
+ *          --shot h6.png help - 6 1        (field manual 6, page 2)
+ *   codebomb --selftest      cube click picking, all 40 lessons and every
+ *                            page of the field manual
+ *                            큐브 클릭 선택, 40개 수업, 매뉴얼 모든 페이지
  */
 #include "editor_ui.h"
+#include "help.h"
+#include "level.h"
 #include "screen_arrays.h"
 #include "screen_mailroom.h"
-#include "screen_pointers.h"
+#include "screen_missions.h"
+#include "soo_lessons.h"
 #include "ui.h"
 
 #include "raylib.h"
@@ -39,33 +55,85 @@
 
 #define CODE_FONT_SIZE 20     /* multiple of 10 / 10의 배수 */
 
-typedef enum { SCREEN_MAILROOM, SCREEN_ARRAYS, SCREEN_POINTERS, SCREEN_COUNT }
+typedef enum { SCREEN_MAP, SCREEN_LESSON, SCREEN_BOMB, SCREEN_MAILROOM }
     ScreenId;
 
 typedef struct {
     ScreenId        screen;
     MailroomScreen *mailroom;
     ArraysScreen   *arrays;
-    PointersScreen  pointers;
+    bool            quitting;    /* "Quit Code Bomb?" is showing
+                                    종료 확인 창이 떠 있음 */
+    bool            quit;
 } Game;
 
-/* Module tabs in the top-right of the header. Later these become the
- * modules on the 3D bomb.
- * 머리 막대 오른쪽 위의 모듈 탭. 나중에 3D 폭탄의 모듈이 된다. */
+static void leave_screen(Game *g)
+{
+    if (g->screen == SCREEN_MAILROOM) mailroom_leave(g->mailroom);
+    if (g->screen == SCREEN_BOMB) arrays_leave(g->arrays);
+    if (g->screen == SCREEN_LESSON) soo_lessons_leave();
+}
+
+/* Opening a screen for the first time also opens its field manual.
+ * 화면을 처음 열면 그 화면의 현장 매뉴얼도 열린다. */
+static void go(Game *g, ScreenId to)
+{
+    if (g->screen != to) leave_screen(g);
+    g->screen = to;
+    if (to == SCREEN_BOMB) help_open_once(HELP_BOMB);
+    if (to == SCREEN_MAILROOM)
+        help_open_once((HelpTopic)mailroom_help_topic(g->mailroom));
+    if (to == SCREEN_LESSON)
+        help_open_once(help_topic_for_level(soo_lessons_level()));
+}
+
+/* Tabs in the top-right, the Exit button, and the screen's Help button.
+ * Missions also returns from a lesson to the map.
+ * 오른쪽 위 탭, Exit 버튼, 화면의 Help 버튼. Missions는 수업에서 지도로
+ * 돌아가는 역할도 한다. */
 static void draw_tabs(Game *g)
 {
-    static const char *const names[SCREEN_COUNT] = { "Mailroom", "Arrays",
-                                                     "Pointers" };
-    for (int n = 0; n < SCREEN_COUNT; n++) {
-        Rectangle r = { 1312 + n * 192, 30, 180, 52 };
-        if (ui_button(r, names[n], true, g->screen == (ScreenId)n) &&
-            g->screen != (ScreenId)n) {
-            if (g->screen == SCREEN_MAILROOM) mailroom_leave(g->mailroom);
-            if (g->screen == SCREEN_ARRAYS) arrays_leave(g->arrays);
-            if (g->screen == SCREEN_POINTERS) pointers_leave(&g->pointers);
-            g->screen = (ScreenId)n;
-        }
+    static const char *const names[3] = { "Missions", "Bomb", "Mailroom" };
+    static const ScreenId targets[3] = { SCREEN_MAP, SCREEN_BOMB, SCREEN_MAILROOM };
+    for (int n = 0; n < 3; n++) {
+        Rectangle r = { 1134 + n * 192, 30, 180, 52 };
+        bool selected = g->screen == targets[n] ||
+                        (n == 0 && g->screen == SCREEN_LESSON);
+        if (ui_button(r, names[n], true, selected)) go(g, targets[n]);
     }
+    if (ui_button((Rectangle){ 1134 + 3 * 192, 30, 180, 52 }, "Exit", true,
+                  false))
+        g->quitting = true;
+
+    Rectangle help = { 972, 30, 150, 52 };
+    if (g->screen == SCREEN_BOMB) help_button(help, HELP_BOMB);
+    if (g->screen == SCREEN_MAILROOM)
+        help_button(help, (HelpTopic)mailroom_help_topic(g->mailroom));
+    if (g->screen == SCREEN_LESSON)
+        help_button(help, help_topic_for_level(soo_lessons_level()));
+}
+
+/* "Quit Code Bomb?" pop-up. Enter quits, Esc cancels.
+ * "Quit Code Bomb?" 팝업. Enter는 종료, Esc는 취소. */
+static void draw_quit(Game *g)
+{
+    DrawRectangle(0, 0, UI_W, UI_H, (Color){ 8, 5, 18, 190 });
+    Rectangle card = { UI_W / 2 - 340, UI_H / 2 - 150, 680, 300 };
+    DrawRectangleRounded(card, 0.1f, 8, UI_PANEL);
+    DrawRectangleRoundedLinesEx(card, 0.1f, 8, 3.0f, UI_ACCENT);
+    const char *t = "Quit Code Bomb?";
+    DrawText(t, UI_W / 2 - MeasureText(t, FS_TITLE) / 2, (int)card.y + 46,
+             FS_TITLE, UI_INK);
+    const char *s = "Progress in this session is not saved.";
+    DrawText(s, UI_W / 2 - MeasureText(s, FS_SMALL) / 2, (int)card.y + 110,
+             FS_SMALL, UI_MUTED);
+    if (ui_button((Rectangle){ card.x + 70, card.y + 190, 250, 64 }, "Quit",
+                  true, true))
+        g->quit = true;
+    if (ui_button((Rectangle){ card.x + card.width - 320, card.y + 190, 250,
+                               64 },
+                  "Cancel", true, false))
+        g->quitting = false;
 }
 
 /* Optional monospace font in assets/, otherwise raylib's pixel font.
@@ -115,6 +183,100 @@ static int arg_int(int argc, char **argv, int i, int fallback)
     return argc > i ? atoi(argv[i]) : fallback;
 }
 
+/* --selftest: cube picking, then every lesson opened, answered and drawn.
+ * --selftest: 큐브 선택 검사 후 모든 수업을 열고 답하고 그린다. */
+/* One frame of the Bomb screen as the main loop runs it while a pop-up is
+ * open: only the clock ticks, then the 3D view is drawn.
+ * 팝업이 열려 있을 때 메인 루프가 실행하는 Bomb 화면 한 프레임: 시계만 가고
+ * 3D 화면을 그린다. */
+static void bomb_frame_under_popup(Game *g)
+{
+    arrays_tick(g->arrays, 1.0f / 60.0f);
+    arrays_render_view(g->arrays);
+}
+
+static int self_test(Game *g, RenderTexture2D canvas)
+{
+    /* Regression: the first click on the Bomb tab opens its Help page
+     * before the Bomb screen has ever updated.
+     * 회귀 검사: Bomb 탭을 처음 누르면 Bomb 화면이 한 번도 업데이트되기 전에
+     * 도움말이 열린다. */
+    puts("First visit to the Bomb screen with Help open:");
+    go(g, SCREEN_BOMB);
+    int failures = help_active() ? 0 : 1;
+    for (int f = 0; f < 3; f++) bomb_frame_under_popup(g);
+    puts("  drawn without crashing ok");
+    puts("First visit to the Mailroom with Help open:");
+    go(g, SCREEN_MAILROOM);
+    if (!help_active()) failures++;
+    for (int f = 0; f < 3; f++) mailroom_render_view(g->mailroom);
+    puts("  drawn without crashing ok");
+    leave_screen(g);
+    g->screen = SCREEN_MAP;
+
+    failures += arrays_self_test(g->arrays);
+    puts("Sumin's lessons (open, answer, play to the end, draw):");
+    int lessons = 0;
+    for (int level = 1; level <= 40; level++) {
+        if (!soo_lessons_open(level)) continue;
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 1 && !soo_lessons_qa(level)) failures++;
+            for (int f = 0; f < 3; f++) {
+                soo_lessons_update(1.0f / 60.0f);
+                BeginTextureMode(canvas);
+                soo_lessons_draw();
+                EndTextureMode();
+            }
+        }
+        lessons++;
+    }
+    printf("  %d lessons drawn\n", lessons);
+    if (lessons != 40) failures++;
+    puts("Mailroom levels (open, play the answer live, submit, draw):");
+    int levels = 0;
+    for (int slot = 0; slot < LEVEL_SLOTS; slot++) {
+        if (!mailroom_select_level(g->mailroom, slot)) continue;
+        help_close();
+        /* the live run drives every scene animation (shredder, belts,
+           press, shelf) to the end / 실시간 실행으로 모든 장면 애니메이션을
+           끝까지 돌린다 */
+        bool played = mailroom_qa_play(g->mailroom, 60.0f);
+        mailroom_render_view(g->mailroom);
+        BeginTextureMode(canvas);
+        mailroom_draw(g->mailroom);
+        EndTextureMode();
+        bool submitted = mailroom_qa_submit(g->mailroom);
+        printf("  level %2d: live run %s, submit %s\n", slot + 1,
+               played ? "ok" : "FAILED", submitted ? "ok" : "FAILED");
+        if (!played || !submitted) failures++;
+        mailroom_qa(g->mailroom, 9, 400);
+        levels++;
+    }
+    int solved, stars;
+    mailroom_progress(g->mailroom, &solved, &stars);
+    printf("  %d levels, %d solved, %d stars\n", levels, solved, stars);
+    if (levels != LEVEL_SLOTS || solved != LEVEL_SLOTS ||
+        stars != 3 * LEVEL_SLOTS)
+        failures++;
+    mailroom_select_level(g->mailroom, 0);
+    help_close();
+    puts("Field manual (every page of every topic):");
+    int pages = 0;
+    for (int t = 0; t < HELP_TOPIC_COUNT; t++) {
+        help_open((HelpTopic)t);
+        for (int p = 0; p < help_page_count((HelpTopic)t); p++) {
+            help_set_page(p);
+            BeginTextureMode(canvas);
+            help_draw();
+            EndTextureMode();
+            pages++;
+        }
+        if (help_page_count((HelpTopic)t) < 2) failures++;
+    }
+    printf("  %d pages drawn\n", pages);
+    return failures;
+}
+
 int main(int argc, char **argv)
 {
     bool shot = argc > 2 && strcmp(argv[1], "--shot") == 0;
@@ -140,41 +302,68 @@ int main(int argc, char **argv)
 
     Game g;
     memset(&g, 0, sizeof g);
-    g.screen = SCREEN_ARRAYS;
+    g.screen = SCREEN_MAP;
     g.mailroom = mailroom_create(&style);
     g.arrays = arrays_create(&style);
-    pointers_init(&g.pointers);
     if (!g.mailroom || !g.arrays) {
         fputs("Out of memory\n", stderr);
         CloseWindow();
         return EXIT_FAILURE;
     }
 
-    if (argc > 1 && strcmp(argv[1], "--selftest") == 0) {
-        puts("Cube bomb click picking:");
-        int failures = arrays_self_test(g.arrays);
+    int exit_code = 0;
+    if (selftest) {
+        int failures = self_test(&g, canvas);
         puts(failures ? "SELFTEST FAILED" : "SELFTEST PASSED");
-        arrays_destroy(g.arrays);
-        mailroom_destroy(g.mailroom);
-        UnloadRenderTexture(canvas);
-        CloseWindow();
-        return failures ? EXIT_FAILURE : EXIT_SUCCESS;
+        exit_code = failures ? EXIT_FAILURE : EXIT_SUCCESS;
+        goto done;
     }
 
     if (shot) {
         const char *screen = argv[3];
         const char *mode = argc > 4 ? argv[4] : "code";
-        int level = arg_int(argc, argv, 5, 1) - 1;
+        int level = arg_int(argc, argv, 5, 1);
         int steps = arg_int(argc, argv, 6, 0);
         int variant = arg_int(argc, argv, 7, 0);
-        if (strcmp(screen, "mailroom") == 0) {
+        if (strcmp(screen, "map") == 0) {
+            g.screen = SCREEN_MAP;
+        } else if (strcmp(screen, "help") == 0) {
+            g.screen = SCREEN_MAP;
+            help_open((HelpTopic)(level - 1));
+            help_set_page(steps);
+        } else if (strcmp(screen, "quit") == 0) {
+            g.screen = SCREEN_MAP;
+            g.quitting = true;
+        } else if (strcmp(screen, "lesson") == 0) {
+            g.screen = SCREEN_LESSON;
+            soo_lessons_qa(level);
+        } else if (strcmp(screen, "mailroom") == 0) {
             g.screen = SCREEN_MAILROOM;
-            mailroom_qa(g.mailroom, level, steps);
-        } else if (strcmp(screen, "pointers") == 0) {
-            g.screen = SCREEN_POINTERS;
-            pointers_qa(&g.pointers, variant, steps);
+            /* variant = Mailroom level 1-11 / variant = 우편실 레벨 1-11 */
+            if (variant > 1) {
+                mailroom_select_level(g.mailroom, variant - 1);
+                help_close();                   /* keep the shot clean */
+            }
+            /* mode "play": run the answer live for steps / 10 seconds
+               mode "play": 정답을 steps / 10초 동안 실제로 재생 */
+            if (strcmp(mode, "stars") == 0) {
+                /* submit the answers of levels 1..steps first, so the
+                   level row shows stars / 레벨 1..steps의 정답을 먼저
+                   Submit해 레벨 줄에 별이 보이게 한다 */
+                for (int s = 0; s < steps && s < LEVEL_SLOTS; s++) {
+                    mailroom_select_level(g.mailroom, s);
+                    mailroom_qa_submit(g.mailroom);
+                }
+                mailroom_select_level(g.mailroom, variant > 0 ? variant - 1 : 0);
+                help_close();
+                mailroom_qa(g.mailroom, level - 1, 0);
+            } else if (strcmp(mode, "play") == 0)
+                mailroom_qa_play(g.mailroom, steps / 10.0f);
+            else
+                mailroom_qa(g.mailroom, level - 1, steps);
         } else {
-            arrays_qa(g.arrays, mode, level, steps, variant);
+            g.screen = SCREEN_BOMB;
+            arrays_qa(g.arrays, mode, level - 1, steps, variant);
             arrays_qa_settle(g.arrays, 1.5f);
         }
     }
@@ -192,11 +381,6 @@ int main(int argc, char **argv)
         float ox = floorf((sw - UI_W * scale) / 2);
         float oy = floorf((sh - UI_H * scale) / 2);
         ui_set_transform(scale, ox, oy);
-
-        /* At exactly 1:1 use point sampling for crisp pixels; otherwise
-         * smooth scaling (Sumin's bilinear filter).
-         * 정확히 1:1이면 선명한 픽셀을 위해 점 샘플링, 아니면 부드러운
-         * 확대 (수민의 bilinear 필터). */
         if (scale != filter_scale) {
             SetTextureFilter(canvas.texture, scale == 1.0f
                                                  ? TEXTURE_FILTER_POINT
@@ -206,29 +390,73 @@ int main(int argc, char **argv)
 
         float dt = GetFrameTime();
         if (dt > 0.1f) dt = 0.1f;
-        switch (g.screen) {
-        case SCREEN_MAILROOM: mailroom_update(g.mailroom, dt); break;
-        case SCREEN_ARRAYS:   arrays_update(g.arrays, dt); break;
-        default:              pointers_update(&g.pointers, dt); break;
+        /* A pop-up takes the keyboard; the screen underneath only keeps
+         * its clock. / 팝업이 키보드를 가져가고, 아래 화면은 시계만 간다. */
+        bool popup = help_active() || g.quitting;
+        if (help_active()) {
+            help_update();
+        } else if (g.quitting) {
+            if (IsKeyPressed(KEY_ESCAPE)) g.quitting = false;
+            if (IsKeyPressed(KEY_ENTER)) g.quit = true;
+            while (GetCharPressed() > 0) {
+            }
+        } else {
+            switch (g.screen) {
+            case SCREEN_MAILROOM: mailroom_update(g.mailroom, dt); break;
+            case SCREEN_BOMB:     arrays_update(g.arrays, dt); break;
+            case SCREEN_LESSON:   soo_lessons_update(dt); break;
+            default:              break;
+            }
         }
+        if (popup && g.screen == SCREEN_BOMB) arrays_tick(g.arrays, dt);
 
         if (g.screen == SCREEN_MAILROOM) mailroom_render_view(g.mailroom);
-        if (g.screen == SCREEN_ARRAYS) arrays_render_view(g.arrays);
+        if (g.screen == SCREEN_BOMB) arrays_render_view(g.arrays);
 
         BeginTextureMode(canvas);
+        ui_block_input(popup);
         switch (g.screen) {
-        case SCREEN_MAILROOM: mailroom_draw(g.mailroom); break;
-        case SCREEN_ARRAYS:   arrays_draw(g.arrays); break;
-        default:              pointers_draw(&g.pointers); break;
+        case SCREEN_MAILROOM:
+            mailroom_draw(g.mailroom);
+            break;
+        case SCREEN_BOMB:
+            arrays_draw(g.arrays);
+            break;
+        case SCREEN_LESSON:
+            if (soo_lessons_draw() == LESSON_OPEN_BUG) {
+                go(&g, SCREEN_BOMB);
+                arrays_open(g.arrays, 1, true);
+            }
+            break;
+        default: {
+            bool done_flags[MISSION_BOMBS];
+            arrays_defused(g.arrays, done_flags);
+            int mail_solved, mail_stars;
+            mailroom_progress(g.mailroom, &mail_solved, &mail_stars);
+            MissionPick pick = missions_draw(done_flags, mail_solved,
+                                             LEVEL_SLOTS);
+            if (pick.kind == PICK_LESSON && soo_lessons_open(pick.level)) {
+                go(&g, SCREEN_LESSON);
+            } else if (pick.kind == PICK_BOMB) {
+                go(&g, SCREEN_BOMB);
+                arrays_open(g.arrays, pick.level, false);
+            } else if (pick.kind == PICK_MAILROOM) {
+                go(&g, SCREEN_MAILROOM);
+            }
+            break;
+        }
         }
         draw_tabs(&g);
+        ui_block_input(false);
+        if (help_active()) help_draw();
+        else if (g.quitting) draw_quit(&g);
         EndTextureMode();
+        if (g.quit) break;
 
         BeginDrawing();
         ClearBackground(UI_LETTERBOX);
-        DrawTexturePro(canvas.texture, (Rectangle){ 0, 0, UI_W, -UI_H },
-                       (Rectangle){ ox, oy, UI_W * scale, UI_H * scale },
-                       (Vector2){ 0, 0 }, 0.0f, WHITE);
+        ui_draw_view(canvas.texture, (Rectangle){ 0, 0, UI_W, -UI_H },
+                     (Rectangle){ ox, oy, UI_W * scale, UI_H * scale });
         EndDrawing();
 
         if (shot && ++frames == 3) {
@@ -237,10 +465,11 @@ int main(int argc, char **argv)
         }
     }
 
+done:
     arrays_destroy(g.arrays);
     mailroom_destroy(g.mailroom);
     if (font_owned) UnloadFont(code_font);
     UnloadRenderTexture(canvas);
     CloseWindow();
-    return 0;
+    return exit_code;
 }

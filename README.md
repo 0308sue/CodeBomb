@@ -1,4 +1,5 @@
 # CodeBomb
+To run the game on Windows, install Raylib then download and unzip the repo. Then go to Bravo/code_bomb and run the file 'run_windows.bat'
 
 C learning game made with C and raylib. / C와 raylib로 만든 C 학습 게임.
 

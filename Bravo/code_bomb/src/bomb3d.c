@@ -40,11 +40,17 @@
 #define FLAT_H     0.85f
 #define FOVY       32.0f
 #define MAX_LABELS 360
-#define MAX_PARTS  320
+#define MAX_PARTS  900
 #define FACES      6
 
 /* Overlay space the screen keeps free at the top and bottom of the panel.
  * 화면이 패널 위와 아래에 비워 두는 오버레이 공간. */
+/* Plates on a face are stacked, never coplanar (coplanar plates flicker,
+ * "z-fighting"). / 면 위의 판은 겹쳐 쌓고 같은 높이에 두지 않는다 (같은 높이의
+ * 판은 깜빡인다, "z-fighting"). */
+#define LAYER      0.03f     /* thickness of one layer / 한 층 두께   */
+#define CLIP_NEAR  1.0f      /* camera clip planes / 카메라 클립 거리 */
+#define CLIP_FAR   250.0f
 #define FIT_TOP    86.0f
 #define FIT_BOTTOM 112.0f
 #define FIT_SIDE   28.0f
@@ -56,10 +62,14 @@ typedef struct {
     Color   color;
 } Label;
 
+typedef enum { PART_SOLID, PART_FIRE, PART_SMOKE } PartKind;
+
 typedef struct {
-    Vector3 p, v;
-    float   life, max_life, size;
-    Color   c;
+    Vector3  p, v;
+    float    life, max_life, size, grow;
+    Color    c;
+    PartKind kind;   /* solid: falls and bounces; fire and smoke rise
+                        solid: 떨어져 튐; fire, smoke: 위로 올라감 */
 } Particle;
 
 /* A face of the bomb: origin at its centre, u = right, v = down, n = out.
@@ -100,6 +110,10 @@ struct BombView {
     bool            have_prev;
 
     float           time, shake, red_flash, green_flash;
+    bool            boomed;          /* explosion started / 폭발 시작됨 */
+    float           boom_t;          /* seconds since it / 폭발 후 시간 */
+    float           white_flash;
+    Vector3         boom_at;
     Particle        parts[MAX_PARTS];
     Label           labels[MAX_LABELS];
     int             nlabels;
@@ -279,9 +293,75 @@ static void spawn_sparks(BombView *v, Vector3 at, Vector3 up, Color c, int n,
         p->v = Vector3Scale(dir, speed * (0.5f + frand()));
         p->max_life = p->life = 0.45f + frand() * 0.45f;
         p->size = 0.06f + frand() * 0.07f;
+        p->grow = 0;
+        p->kind = PART_SOLID;
         p->c = frand() < 0.3f ? (Color){ 255, 240, 200, 255 } : c;
         n--;
     }
+}
+
+static Particle *free_particle(BombView *v)
+{
+    for (int k = 0; k < MAX_PARTS; k++)
+        if (v->parts[k].life <= 0) return &v->parts[k];
+    return NULL;
+}
+
+static Vector3 rand_dir(void)
+{
+    return Vector3Normalize(v3(frand() * 2 - 1, frand() * 2 - 1,
+                               frand() * 2 - 1));
+}
+
+/* The explosion: debris, fire, smoke and sparks from the cube's centre.
+ * 폭발: 큐브 중심에서 잔해, 불, 연기, 불꽃이 나온다. */
+static void spawn_explosion(BombView *v, Vector3 at)
+{
+    static const Color DEBRIS[4] = { { 58, 62, 72, 255 }, { 96, 100, 112, 255 },
+                                     { 30, 30, 34, 255 }, { 76, 80, 92, 255 } };
+    static const Color FIRE[3] = { { 255, 230, 140, 255 }, { 255, 150, 50, 255 },
+                                   { 230, 70, 30, 255 } };
+    for (int n = 0; n < 110; n++) {           /* casing pieces / 몸체 조각 */
+        Particle *p = free_particle(v);
+        if (!p) return;
+        Vector3 d = rand_dir();
+        d.y = fabsf(d.y) * 0.9f + 0.3f;
+        p->p = Vector3Add(at, Vector3Scale(d, 1.2f));
+        p->v = Vector3Scale(Vector3Normalize(d), 5.0f + frand() * 10.0f);
+        p->max_life = p->life = 4.0f + frand() * 3.0f;
+        p->size = 0.14f + frand() * 0.34f;
+        p->grow = 0;
+        p->kind = PART_SOLID;
+        p->c = DEBRIS[n % 4];
+    }
+    for (int n = 0; n < 170; n++) {           /* fire / 불 */
+        Particle *p = free_particle(v);
+        if (!p) return;
+        Vector3 d = rand_dir();
+        d.y = fabsf(d.y) * 0.7f + 0.15f;
+        p->p = Vector3Add(at, Vector3Scale(d, frand() * 1.5f));
+        p->v = Vector3Scale(Vector3Normalize(d), 3.0f + frand() * 8.0f);
+        p->max_life = p->life = 0.5f + frand() * 0.8f;
+        p->size = 0.45f + frand() * 0.6f;
+        p->grow = 1.4f;
+        p->kind = PART_FIRE;
+        p->c = FIRE[n % 3];
+    }
+    for (int n = 0; n < 90; n++) {            /* smoke / 연기 */
+        Particle *p = free_particle(v);
+        if (!p) return;
+        Vector3 d = rand_dir();
+        d.y = fabsf(d.y) * 0.5f + 0.4f;
+        p->p = Vector3Add(at, Vector3Scale(d, frand() * 2.0f));
+        p->v = Vector3Scale(Vector3Normalize(d), 1.0f + frand() * 3.0f);
+        p->max_life = p->life = 2.2f + frand() * 1.8f;
+        p->size = 0.6f + frand() * 0.6f;
+        p->grow = 0.7f;
+        p->kind = PART_SMOKE;
+        unsigned char g = (unsigned char)(40 + frand() * 40);
+        p->c = (Color){ g, g, (unsigned char)(g + 6), 255 };
+    }
+    spawn_sparks(v, at, v3(0, 1, 0), (Color){ 255, 200, 90, 255 }, 140, 13.0f);
 }
 
 static void update_particles(BombView *v, float dt)
@@ -290,6 +370,16 @@ static void update_particles(BombView *v, float dt)
         Particle *p = &v->parts[k];
         if (p->life <= 0) continue;
         p->life -= dt;
+        p->size += p->grow * dt;
+        if (p->kind != PART_SOLID) {
+            /* fire and smoke slow down and drift upward
+               불과 연기는 느려지며 위로 떠오른다 */
+            float drag = expf((p->kind == PART_FIRE ? -3.0f : -1.2f) * dt);
+            p->v = Vector3Scale(p->v, drag);
+            p->v.y += (p->kind == PART_FIRE ? 2.5f : 0.9f) * dt;
+            p->p = Vector3Add(p->p, Vector3Scale(p->v, dt));
+            continue;
+        }
         p->v.y -= 9.0f * dt;
         p->p = Vector3Add(p->p, Vector3Scale(p->v, dt));
         if (p->p.y < 0.02f) {             /* bounce on the table / 탁자에서 튐 */
@@ -305,12 +395,50 @@ static void draw_particles(const BombView *v)
 {
     for (int k = 0; k < MAX_PARTS; k++) {
         const Particle *p = &v->parts[k];
-        if (p->life <= 0) continue;
+        if (p->life <= 0 || p->kind != PART_SOLID) continue;
         float t = p->life / p->max_life;
         Color c = p->c;
-        c.a = (unsigned char)(255 * t);
+        c.a = (unsigned char)(255 * fminf(1.0f, t * 3.0f));
         DrawCube(p->p, p->size, p->size, p->size, c);
     }
+    /* Smoke and fire are see-through, so they don't write depth; fire adds
+     * light. / 연기와 불은 반투명이라 깊이를 쓰지 않고, 불은 빛을 더한다. */
+    rlDrawRenderBatchActive();
+    rlDisableDepthMask();
+    for (int k = 0; k < MAX_PARTS; k++) {
+        const Particle *p = &v->parts[k];
+        if (p->life <= 0 || p->kind != PART_SMOKE) continue;
+        float t = p->life / p->max_life;
+        Color c = p->c;
+        c.a = (unsigned char)(120 * t);
+        DrawSphereEx(p->p, p->size, 5, 7, c);
+    }
+    BeginBlendMode(BLEND_ADDITIVE);
+    for (int k = 0; k < MAX_PARTS; k++) {
+        const Particle *p = &v->parts[k];
+        if (p->life <= 0 || p->kind != PART_FIRE) continue;
+        float t = p->life / p->max_life;
+        Color c = mix((Color){ 120, 20, 10, 255 }, p->c, t);
+        c.a = (unsigned char)(220 * t);
+        DrawSphereEx(p->p, p->size, 5, 7, c);
+    }
+    if (v->boomed && v->boom_t < 0.9f) {
+        /* fireball and shock ring / 불덩이와 충격파 고리 */
+        float t = v->boom_t / 0.9f;
+        float r = 1.2f + (1.0f - (1.0f - t) * (1.0f - t)) * 4.0f;
+        Color c = mix((Color){ 255, 240, 180, 255 }, (Color){ 200, 60, 20, 255 },
+                      t);
+        c.a = (unsigned char)(230 * (1.0f - t));
+        DrawSphereEx(v->boom_at, r, 10, 14, c);
+        for (int k = 0; k < 4; k++)
+            DrawCircle3D(v3(v->boom_at.x, 0.06f, v->boom_at.z),
+                         r * 1.6f + k * 0.12f, v3(1, 0, 0), 90.0f,
+                         (Color){ 255, 200, 140,
+                                  (unsigned char)(200 * (1.0f - t)) });
+    }
+    EndBlendMode();
+    rlDrawRenderBatchActive();
+    rlEnableDepthMask();
 }
 
 /* ========================================================================
@@ -504,7 +632,8 @@ void bomb_view_reset(BombView *v)
 {
     v->layout = -1;
     v->have_prev = false;
-    v->shake = v->red_flash = v->green_flash = 0;
+    v->shake = v->red_flash = v->green_flash = v->white_flash = 0;
+    v->boomed = false;
     memset(v->press, 0, sizeof v->press);
     memset(v->flash, 0, sizeof v->flash);
     memset(v->spark, 0, sizeof v->spark);
@@ -582,6 +711,7 @@ int bomb_view_update(BombView *v, const BombScene *s, float dt, Vector2 mouse,
 {
     int clicked = -1;
     v->time += dt;
+    if (s->count <= 0 || !s->modules[0].state) return -1;   /* empty scene */
 
     int sig = layout_signature(s);
     if (sig != v->layout) {
@@ -628,6 +758,21 @@ int bomb_view_update(BombView *v, const BombScene *s, float dt, Vector2 mouse,
 
     detect_changes(v, s);
 
+    if (s->cube && s->exploded && !v->boomed) {
+        v->boomed = true;
+        v->boom_t = 0;
+        v->boom_at = cube_center(v);
+        v->shake = 1.8f;
+        v->white_flash = 1.0f;
+        v->pressing = v->dragging = false;
+        spawn_explosion(v, v->boom_at);
+    } else if (!s->exploded && v->boomed) {
+        v->boomed = false;              /* restarted / 다시 시작 */
+        v->shake = v->white_flash = 0;
+        for (int k = 0; k < MAX_PARTS; k++) v->parts[k].life = 0;
+    }
+    if (v->boomed) v->boom_t += dt;
+
     /* card lift toward the accessed card, flash fade
        접근한 카드는 올라오고, 번쩍임은 사라짐 */
     for (int m = 0; m < s->count; m++) {
@@ -645,6 +790,7 @@ int bomb_view_update(BombView *v, const BombScene *s, float dt, Vector2 mouse,
     v->shake = fmaxf(0.0f, v->shake - dt * 2.2f);
     v->red_flash = fmaxf(0.0f, v->red_flash - dt * 1.6f);
     v->green_flash = fmaxf(0.0f, v->green_flash - dt * 0.8f);
+    v->white_flash = fmaxf(0.0f, v->white_flash - dt * 1.4f);
     update_particles(v, dt);
     return clicked;
 }
@@ -708,10 +854,10 @@ static void draw_lcd(BombView *v, const Xform *x, const Face *f, float fx,
                      const char *text, int size, Color on)
 {
     face_plate(x, f, fx, fy, w + 0.16f, h + 0.16f, 0.0f, 0.06f, COL_RECESS);
-    face_plate(x, f, fx, fy, w, h, 0.06f, 0.03f, COL_LCD);
+    face_plate(x, f, fx, fy, w, h, 0.07f, LAYER, COL_LCD);
     if (facing(v, x, f) < 0.15f) return;
     float tx = caption && caption[0] ? fx + w * 0.14f : fx;
-    Vector3 p = face_point(x, f, tx, fy, 0.1f);
+    Vector3 p = face_point(x, f, tx, fy, 0.11f);
     if (size >= 40) {               /* ghost segments on the big display only
                                        꺼진 칸은 큰 표시창에만 */
         char ghost[24];
@@ -720,7 +866,7 @@ static void draw_lcd(BombView *v, const Xform *x, const Face *f, float fx,
     }
     add_label(v, p, text, size, on);
     if (caption && caption[0])
-        add_label(v, face_point(x, f, fx - w * 0.34f, fy, 0.1f), caption, 20,
+        add_label(v, face_point(x, f, fx - w * 0.34f, fy, 0.11f), caption, 20,
                   shade(on, 0.75f));
 }
 
@@ -736,8 +882,12 @@ static void draw_led(const Xform *x, const Face *f, float fx, float fy,
  * 면 f 위에 한 모듈의 카드를 그린다. avail = 면 위의 공간. */
 static void draw_module(BombView *v, const Xform *x, const Face *f, int slot,
                         const SooState *st, float avail_w, float avail_h,
-                        bool labels, bool selected)
+                        bool labels, bool selected, float floor_h)
 {
+    /* floor_h = height of the plate underneath. Layers above it:
+     * recess, then the selection frame and cards on top of the recess.
+     * floor_h = 아래 판의 높이. 그 위로 홈, 그리고 홈 위에 선택 테두리와 카드. */
+    float recess_top = floor_h + LAYER;
     const SooLevel *l = st->level;
     float grid_w = l->cols * PITCH - (PITCH - TILE);
     float grid_d = l->rows * PITCH - (PITCH - TILE);
@@ -747,14 +897,16 @@ static void draw_module(BombView *v, const Xform *x, const Face *f, int slot,
 
     /* recess the cards sit in / 카드가 놓이는 홈 */
     float rec_w = grid_w * sc + 0.5f * sc, rec_h = grid_d * sc + 0.5f * sc;
-    face_plate(x, f, 0, 0, rec_w, rec_h, 0.0f, 0.03f, COL_RECESS);
+    face_plate(x, f, 0, 0, rec_w, rec_h, floor_h, LAYER, COL_RECESS);
     if (selected) {
         Color a = UI_ACCENT;
         float t = 0.07f;
-        face_plate(x, f, 0, -rec_h * 0.5f - t, rec_w + 2 * t, t, 0, 0.05f, a);
-        face_plate(x, f, 0, rec_h * 0.5f + t, rec_w + 2 * t, t, 0, 0.05f, a);
-        face_plate(x, f, -rec_w * 0.5f - t, 0, t, rec_h, 0, 0.05f, a);
-        face_plate(x, f, rec_w * 0.5f + t, 0, t, rec_h, 0, 0.05f, a);
+        float th2 = LAYER + 0.02f;       /* stands above the recess
+                                            홈보다 높이 솟는다 */
+        face_plate(x, f, 0, -rec_h * 0.5f - t, rec_w + 2 * t, t, floor_h, th2, a);
+        face_plate(x, f, 0, rec_h * 0.5f + t, rec_w + 2 * t, t, floor_h, th2, a);
+        face_plate(x, f, -rec_w * 0.5f - t, 0, t, rec_h, floor_h, th2, a);
+        face_plate(x, f, rec_w * 0.5f + t, 0, t, rec_h, floor_h, th2, a);
     }
 
     bool show = labels && facing(v, x, f) > 0.3f;
@@ -771,7 +923,7 @@ static void draw_module(BombView *v, const Xform *x, const Face *f, int slot,
             int k = r * l->cols + c;
             float fx = (c - (l->cols - 1) * 0.5f) * pitch;
             float fy = (r - (l->rows - 1) * 0.5f) * pitch;
-            float lift = 0.03f + v->press[slot][k] * 0.16f * sc;
+            float lift = recess_top + 0.01f + v->press[slot][k] * 0.16f * sc;
             bool fault = st->cells[k] != 0;
             Color base = fault ? UI_FAULT : UI_SAFE;
             base = mix(base, (Color){ 255, 255, 255, 255 },
@@ -810,10 +962,12 @@ static void draw_module(BombView *v, const Xform *x, const Face *f, int slot,
             if (one_d) snprintf(buf, sizeof buf, "[%d]", c);
             else snprintf(buf, sizeof buf, "[%d][%d]", r, c);
             float off = one_d ? tile * 0.5f + 0.32f * sc + 0.06f : tile * 0.33f;
-            add_label(v, face_point(x, f, fx, fy - off, one_d ? 0.06f : top), buf,
+            add_label(v, face_point(x, f, fx, fy - off,
+                                    one_d ? recess_top + 0.03f : top), buf,
                       small, one_d ? UI_INK : (Color){ 235, 235, 245, 255 });
             snprintf(buf, sizeof buf, "to %d", l->goal[k]);
-            add_label(v, face_point(x, f, fx, fy + off, one_d ? 0.06f : top), buf,
+            add_label(v, face_point(x, f, fx, fy + off,
+                                    one_d ? recess_top + 0.03f : top), buf,
                       small, one_d ? UI_ACCENT : (Color){ 255, 236, 170, 255 });
         }
 }
@@ -853,7 +1007,7 @@ static void draw_flat(BombView *v, const BombScene *s)
     int stripes = (int)(W / 0.6f);
     for (int k = 0; k < stripes; k++) {
         float fx = -W * 0.5f + 0.3f + k * 0.6f;
-        face_plate(&x, &front, fx, 0, 0.3f, FLAT_H * 0.4f, 0, 0.01f,
+        face_plate(&x, &front, fx, 0, 0.3f, FLAT_H * 0.4f, 0, LAYER,
                    (k & 1) ? (Color){ 30, 28, 26, 255 }
                            : (Color){ 236, 186, 40, 255 });
     }
@@ -867,7 +1021,7 @@ static void draw_flat(BombView *v, const BombScene *s)
 
     /* the challenge: cards on the top face / 도전 과제: 윗면의 카드 */
     Face f = flat_top_face(l);
-    draw_module(v, &x, &f, 0, st, 100.0f, 100.0f, true, false);
+    draw_module(v, &x, &f, 0, st, 100.0f, 100.0f, true, false, 0.04f);
 
     /* display strip at the back / 뒤쪽 표시창 줄 */
     float zs = -D * 0.5f + 0.95f;
@@ -896,8 +1050,33 @@ static void draw_flat(BombView *v, const BombScene *s)
     }
 }
 
+/* What is left after the explosion: a scorch mark and burnt pieces.
+ * 폭발 뒤 남은 것: 그을음 자국과 탄 조각. */
+static void draw_wreck(void)
+{
+    draw_shadow(0, 0, 3.6f, 3.6f, 1.0f);
+    draw_shadow(0, 0, 2.2f, 2.2f, 1.0f);
+    static const float P[7][5] = {   /* x, z, w, h, yaw */
+        { 0.0f, 0.2f, 2.2f, 0.5f, 0.3f },   { -1.6f, 1.1f, 0.9f, 0.3f, 1.1f },
+        { 1.7f, -0.6f, 1.1f, 0.35f, -0.7f }, { 0.6f, 1.9f, 0.6f, 0.25f, 0.5f },
+        { -1.1f, -1.5f, 0.8f, 0.3f, 2.0f },  { 2.4f, 1.5f, 0.4f, 0.2f, 0.9f },
+        { -2.5f, 0.0f, 0.5f, 0.2f, -1.2f },
+    };
+    for (int k = 0; k < 7; k++) {
+        Xform x = { QuaternionFromAxisAngle(v3(0, 1, 0), P[k][4]),
+                    v3(P[k][0], P[k][3] * 0.5f, P[k][1]) };
+        draw_box(&x, v3(0, 0, 0), v3(P[k][2] * 0.5f, P[k][3] * 0.5f,
+                                     P[k][2] * 0.35f),
+                 k == 0 ? (Color){ 34, 32, 34, 255 } : (Color){ 46, 46, 52, 255 });
+    }
+}
+
 static void draw_cube(BombView *v, const BombScene *s)
 {
+    if (v->boomed) {
+        draw_wreck();
+        return;
+    }
     Vector3 c = cube_center(v);
     Xform x = { v->q, c };
     float h = CUBE_S * 0.5f;
@@ -925,7 +1104,7 @@ static void draw_cube(BombView *v, const BombScene *s)
     for (int m = 0; m < FACES; m++) {
         Face f = CUBE_FACES[m];
         f.o = Vector3Scale(f.n, h);
-        face_plate(&x, &f, 0, 0, CUBE_S - 0.5f, CUBE_S - 0.5f, 0, 0.03f, COL_TOP);
+        face_plate(&x, &f, 0, 0, CUBE_S - 0.5f, CUBE_S - 0.5f, 0, LAYER, COL_TOP);
         if (m < s->count) {
             const SooState *st = s->modules[m].state;
             /* Only the module being worked on gets text; the other faces
@@ -933,7 +1112,7 @@ static void draw_cube(BombView *v, const BombScene *s)
              * 작업 중인 모듈에만 글자를 넣고, 다른 면은 카드 색만 보여 주어
              * 폭탄을 깔끔하게 유지한다. */
             draw_module(v, &x, &f, m, st, avail_w, avail_h, m == s->selected,
-                        m == s->selected);
+                        m == s->selected, LAYER);
             draw_led(&x, &f, h - 0.62f, -h + 0.62f,
                      status_led(st, s->modules[m].solved,
                                 s->running && m == s->selected, v->time),
@@ -955,8 +1134,11 @@ static void draw_cube(BombView *v, const BombScene *s)
             }
             /* display module: big LCD and one light per module
                표시창 모듈: 큰 LCD와 모듈별 불빛 */
+            Color on = COL_LCD_ON;
+            if (s->lcd_alert && fmodf(v->time, 0.5f) < 0.25f)
+                on = (Color){ 255, 220, 200, 255 };   /* blink / 깜박임 */
             draw_lcd(v, &x, &f, 0, 0.9f, 4.4f, 1.3f, s->lcd_caption, s->lcd, 40,
-                     COL_LCD_ON);
+                     on);
             draw_lcd(v, &x, &f, 0, -0.75f, 3.0f, 0.8f, NULL, s->lcd_small, 20,
                      (Color){ 255, 190, 70, 255 });
             for (int k = 0; k < s->count; k++)
@@ -982,14 +1164,26 @@ void bomb_view_render(BombView *v, const BombScene *s)
 
     BeginTextureMode(v->tex);
     ClearBackground(COL_ROOM);
+    /* raylib's default near plane (0.01-0.05) wastes depth precision; the
+     * camera is always 10+ units away, so 1.0 is safe and stops flicker.
+     * raylib 기본 근거리 평면(0.01-0.05)은 깊이 정밀도를 낭비한다. 카메라는
+     * 항상 10 이상 떨어져 있으므로 1.0이 안전하고 깜빡임을 없앤다. */
+    double old_near = rlGetCullDistanceNear(), old_far = rlGetCullDistanceFar();
+    rlSetClipPlanes(CLIP_NEAR, CLIP_FAR);
     BeginMode3D(v->cam);
     rlDisableBackfaceCulling();
     draw_table();
-    if (s->cube) draw_cube(v, s);
-    else draw_flat(v, s);
+    /* a scene without module state has nothing to put on the table
+       모듈 상태가 없는 장면은 탁자에 올릴 것이 없다 */
+    bool ready = s->count > 0;
+    for (int m = 0; m < s->count && m < BOMB_MAX_MODULES; m++)
+        if (!s->modules[m].state) ready = false;
+    if (ready && s->cube) draw_cube(v, s);
+    else if (ready) draw_flat(v, s);
     draw_particles(v);
     rlEnableBackfaceCulling();
     EndMode3D();
+    rlSetClipPlanes(old_near, old_far);
 
     /* warm lamp light and a dark vignette / 따뜻한 조명과 어두운 가장자리 */
     /* (DrawCircleGradient's arguments differ between raylib 5.5 and 6.0,
@@ -1020,6 +1214,13 @@ void bomb_view_render(BombView *v, const BombScene *s)
     if (v->green_flash > 0)
         DrawRectangle(0, 0, v->w, v->h,
                       (Color){ 60, 255, 160, (unsigned char)(40 * v->green_flash) });
+    if (v->boomed && v->boom_t < 2.0f)
+        DrawRectangle(0, 0, v->w, v->h,
+                      (Color){ 255, 110, 30,
+                               (unsigned char)(70 * (1.0f - v->boom_t / 2.0f)) });
+    if (v->white_flash > 0)
+        DrawRectangle(0, 0, v->w, v->h,
+                      (Color){ 255, 250, 235, (unsigned char)(255 * v->white_flash) });
     EndTextureMode();
 }
 
