@@ -6,6 +6,7 @@
  * English: Levels are data, not separate screens. 0=SAFE, 1=FAULT.
  * 2D 배열은 row * cols + col 위치에 평탄화해서 저장한다.
  * Store 2D arrays flat at row * cols + col. */
+
 const SooLevel SOO_LEVELS[SOO_LEVEL_COUNT] = {
     {"01  First connection", "Array index", "Set cards[2] to 0. Indexing starts at zero.",
      1, 6, {0,0,1,0,0,0}, {0}, 20},
@@ -33,6 +34,9 @@ static bool Fail(SooState *s, const char *message)
 
 /* 한글: 재시작 또는 이전 단계 재생 시 초기 데이터로 완전히 복원한다.
  * English: Restore original data for restart or deterministic replay. */
+// 수 리셋 셋츠 업 더 스타팅 스테이트.
+// 잇 카피즈 더 레벨즈 어리저널 밸류즈 / 인투 더 커런트 어레이.
+// 잇 올소 리셋츠 디 오퍼레이션 카운트.
 void SooReset(SooState *s, const SooLevel *level)
 {
     memset(s, 0, sizeof(*s));
@@ -45,6 +49,9 @@ void SooReset(SooState *s, const SooLevel *level)
 
 /* 한글: 최종 결과뿐 아니라 레벨 3의 역방향 순회도 이벤트 순서로 검사한다.
  * English: Goals compare every cell; reverse traversal is also checked below. */
+// 웬 더 프로그램 엔즈 / 수 골 리치트 첵스 에브리 셀.
+// 잇 컴페어즈 더 커런트 밸류즈 / 위드 더 타겟 밸류즈.
+// 이프 데이 올 매치 / 디 엔진 마크스 더 레벨 애즈 컴플리트.
 bool SooGoalReached(const SooState *s)
 {
     for (int k = 0; k < s->level->rows * s->level->cols; ++k)
@@ -56,6 +63,11 @@ bool SooGoalReached(const SooState *s)
  * English: Editor-provided events go through this same validator.
  * 범위 → 예산 → 실제 변경 순서로 처리하므로 잘못된 메모리에 접근하지 않는다.
  * Validate bounds and budget before accessing or changing a cell. */
+
+// 수 어플라이 이벤트 / 테이크스 더 커런트 스테이트 앤 원 이벤트.
+// 잇 첵스 더 로우 앤 칼럼 퍼스트.
+// 포 이그잼플 / 언 어레이 위드 에이트 셀즈 / 해즈 인디시즈 지로우 투 세븐.
+// 언 액세스 투 인덱스 에이트 / 스탑스 위드 언 에러.
 bool SooApplyEvent(SooState *s, SooEvent e)
 {
     if (s->status == SOO_FAILURE || s->status == SOO_SUCCESS) return false;
@@ -96,9 +108,9 @@ bool SooApplyEvent(SooState *s, SooEvent e)
     s->operations++;
     s->active_row = e.row; s->active_col = e.col;
     int index = e.row * s->level->cols + e.col;
-    if (e.kind == SOO_WRITE) {
-        if (e.value != 0 && e.value != 1) return Fail(s, "Card values must be 0 (SAFE) or 1 (FAULT).");
-        s->cells[index] = e.value;
+    if (e.kind == SOO_WRITE) { // 잇 올소 첵스 디 오퍼레이션 리밋 / 비포 체인징 어 밸류.
+        if (e.value != 0 && e.value != 1) return Fail(s, "Card values must be 0 (SAFE) or 1 (FAULT)."); // 포 어 라이트 이벤트 / 디스 라인 업데이트츠 디 어레이.
+        s->cells[index] = e.value;  // 히어 / 인덱스 이즈 더 셀 퍼지션. 이 닷 밸류 이즈 더 뉴 밸류. 더 스크린 덴 드로즈 디 업데이트드 스테이트.
         snprintf(s->message, sizeof(s->message), "WRITE [%d][%d] = %d. Check this against TARGET.", e.row, e.col, e.value);
     } else {
         snprintf(s->message, sizeof(s->message), "READ [%d][%d] -> %d. A read does not change the card.", e.row, e.col, s->cells[index]);

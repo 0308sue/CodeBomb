@@ -11,6 +11,9 @@
 #define SOO_MAX_EVENTS 512
 #define SOO_LEVEL_COUNT 6
 
+// 아이 유즈드 챗지피티 / 앤 아워 렉처러스 노츠 / 투 크리에이트 더 러닝 미션즈.
+// 마이 파트 핸들즈 디 어레이 스테이트 / 앤 첵스 이치 액션.
+
 typedef struct {
     const char *title;
     const char *concept;
@@ -21,6 +24,9 @@ typedef struct {
     int budget;  /* 한글: 읽기/쓰기 각각 1회. English: Each read/write costs one. */
 } SooLevel;
 
+// 데어 아 투 메인 스트럭처즈 / 수 스테이트 앤 수 이벤트.
+// 수 스테이트 스토어즈 더 커런트 밸류즈 / 앤 디 오퍼레이션 카운트.
+
 typedef enum { SOO_LOOP, SOO_READ, SOO_WRITE, SOO_END } SooEventKind;
 typedef struct {
     SooEventKind kind;
@@ -29,6 +35,7 @@ typedef struct {
     int i, j;  /* 한글: -1은 아직 미정. English: -1 means not set. */
 } SooEvent;
 
+// 수 이벤트 디스크라이브즈 원 액션 / 라이크 리딩 오어 라이팅 어 셀.
 typedef enum { SOO_READY, SOO_RUNNING, SOO_SUCCESS, SOO_FAILURE } SooStatus;
 typedef struct {
     const SooLevel *level;
